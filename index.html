@@ -3,518 +3,2278 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cozy — Sessions Dashboard</title>
+<title>OpenClaw Sessions Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0a0a0f; color: #e0e0e8; min-height: 100vh; }
-  .header { padding: 16px 24px; border-bottom: 1px solid #1a1a2e; display: flex; align-items: center; justify-content: space-between; }
-  .header h1 { font-size: 17px; font-weight: 600; }
-  .header h1 span { color: #7c6ff7; }
-  .controls { display: flex; align-items: center; gap: 8px; }
-  .stats-bar { display: flex; gap: 16px; padding: 12px 24px; border-bottom: 1px solid #1a1a2e; background: #0d0d14; flex-wrap: wrap; }
-  .stat { text-align: center; min-width: 60px; }
-  .stat-value { font-size: 20px; font-weight: 700; color: #7c6ff7; }
-  .stat-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
-  .filter-bar { padding: 10px 24px; border-bottom: 1px solid #1a1a2e; display: flex; gap: 6px; flex-wrap: wrap; }
-  .fbtn { background: #12121c; border: 1px solid #1e1e30; color: #666; padding: 3px 10px; border-radius: 5px; cursor: pointer; font-size: 10px; }
-  .fbtn:hover, .fbtn.on { background: #1e1e30; color: #ddd; border-color: #7c6ff7; }
-  .refresh-btn { background: #1a1a2e; border: 1px solid #2a2a3e; color: #888; padding: 4px 10px; border-radius: 5px; cursor: pointer; font-size: 10px; }
-  .refresh-btn:hover { background: #2a2a3e; color: #fff; }
-  .ts { font-size: 9px; color: #333; }
-  .grid { padding: 16px 24px; display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 10px; }
-  .card { background: #12121c; border: 1px solid #1e1e30; border-radius: 10px; padding: 14px; transition: border-color 0.2s; }
-  .card:hover { border-color: #3a3a5e; }
-  .card.is-active { border-color: #4ade8044; }
-  .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
-  .card-name { font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .badge { font-size: 8px; padding: 2px 6px; border-radius: 3px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-  .bg { background: #1a2744; color: #5b9cf5; }
-  .bs { background: #2a1444; color: #c55bf5; }
-  .bc { background: #2a2a14; color: #f5c55b; }
-  .bd { background: #1a4424; color: #5bf59c; }
-  .meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 10px; color: #444; margin-bottom: 6px; }
-  .dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 4px; flex-shrink: 0; margin-top: 3px; }
-  .d-active { background: #4ade80; box-shadow: 0 0 8px #4ade8066; animation: pulse 2s infinite; }
-  .d-recent { background: #f59e0b; }
-  .d-idle { background: #222; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
-  .activity { margin-top: 8px; border-top: 1px solid #1a1a2e; padding-top: 8px; }
-  .act-item { font-size: 11px; padding: 3px 0; display: flex; gap: 6px; align-items: flex-start; }
-  .act-action { color: #7c6ff7; font-weight: 500; white-space: nowrap; }
-  .act-detail { color: #555; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: 'SF Mono', Monaco, monospace; font-size: 10px; }
-  .act-time { color: #333; font-size: 9px; margin-left: auto; white-space: nowrap; }
-  .act-cost { color: #f59e0b; font-size: 9px; font-weight: 600; }
-  .empty { text-align: center; padding: 60px; color: #333; }
-  .live-dot { display: inline-block; width: 6px; height: 6px; background: #4ade80; border-radius: 50%; margin-left: 6px; animation: pulse 1.5s infinite; }
-  /* Detail panel */
-  .panel-overlay { position: fixed; inset: 0; background: #000a; z-index: 100; display: none; }
-  .panel-overlay.open { display: flex; justify-content: flex-end; }
-  .panel { width: min(700px, 90vw); height: 100vh; background: #0d0d14; border-left: 1px solid #1e1e30; overflow-y: auto; padding: 0; }
-  .panel-header { padding: 16px 20px; border-bottom: 1px solid #1e1e30; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: #0d0d14; z-index: 2; }
-  .panel-header h2 { font-size: 14px; font-weight: 600; }
-  .panel-close { background: none; border: 1px solid #2a2a3e; color: #888; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
-  .panel-close:hover { color: #fff; border-color: #555; }
-  .panel-meta { padding: 10px 20px; font-size: 10px; color: #444; border-bottom: 1px solid #1a1a2e; display: flex; gap: 12px; flex-wrap: wrap; }
-  .log { padding: 12px 20px; overflow-y: auto; max-height: calc(100vh - 100px); }
-  .log-entry { margin-bottom: 12px; border-left: 2px solid #1e1e30; padding-left: 12px; }
-  .log-entry.role-user { border-color: #5b9cf5; }
-  .log-entry.role-assistant { border-color: #7c6ff7; }
-  .log-entry.role-tool { border-color: #f59e0b; }
-  .log-ts { font-size: 9px; color: #333; margin-bottom: 2px; }
-  .log-role { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .log-role.r-user { color: #5b9cf5; }
-  .log-role.r-assistant { color: #7c6ff7; }
-  .log-tool-group { background: #12121c; border: 1px solid #1e1e30; border-radius: 6px; margin: 4px 0; overflow: hidden; }
-  .log-tool-call { padding: 8px 10px; }
-  .log-tool-name { font-size: 11px; color: #f59e0b; font-weight: 600; cursor: pointer; }
-  .log-tool-name:hover { text-decoration: underline; }
-  .log-tool-args { font-size: 10px; color: #555; font-family: 'SF Mono', Monaco, monospace; white-space: pre-wrap; word-break: break-all; max-height: 120px; overflow-y: auto; margin-top: 4px; }
-  .log-tool-result { background: #0a0a10; border-top: 1px solid #1a1a2e; padding: 8px 10px; }
-  .log-tool-result-text { font-size: 10px; color: #4a4a5a; font-family: 'SF Mono', Monaco, monospace; white-space: pre-wrap; word-break: break-all; max-height: 200px; overflow-y: auto; }
-  .log-tool-result-label { font-size: 9px; color: #4ade80; font-weight: 600; margin-bottom: 3px; }
-  .log-tool-pending { background: #0a0a10; border-top: 1px dashed #1e1e30; padding: 6px 10px; font-size: 10px; color: #444; font-style: italic; }
-  .log-text { font-size: 12px; color: #bbb; line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
-  .log-thinking { font-size: 10px; color: #555; font-style: italic; background: #0a0a12; padding: 6px 8px; border-radius: 4px; margin: 4px 0; }
-  .log-cost { font-size: 9px; color: #f59e0b; margin-top: 2px; }
-  .log-model { font-size: 9px; color: #333; }
-  .log-loading { text-align: center; padding: 40px; color: #444; }
-  .log-spinner { display: flex; align-items: center; gap: 8px; padding: 12px 0; color: #7c6ff7; font-size: 12px; }
-  .log-spinner .dots { display: inline-flex; gap: 3px; }
-  .log-spinner .dots span { width: 5px; height: 5px; background: #7c6ff7; border-radius: 50%; animation: bounce 1.4s infinite ease-in-out; }
-  .log-spinner .dots span:nth-child(1) { animation-delay: 0s; }
-  .log-spinner .dots span:nth-child(2) { animation-delay: 0.16s; }
-  .log-spinner .dots span:nth-child(3) { animation-delay: 0.32s; }
-  @keyframes bounce { 0%,80%,100% { transform: scale(0); opacity: 0.3; } 40% { transform: scale(1); opacity: 1; } }
-  .parent-link { font-size: 9px; color: #7c6ff7; cursor: pointer; margin-top: 4px; }
-  .parent-link:hover { text-decoration: underline; color: #9d93ff; }
-  .children-section { margin-top: 8px; border-top: 1px solid #1a1a2e; padding-top: 8px; }
-  .children-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-  .child-item { font-size: 10px; padding: 3px 6px; margin: 2px 0; background: #0a0a12; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
-  .child-item:hover { background: #1a1a2e; }
-  .child-name { color: #888; }
-  .child-time { color: #333; font-size: 9px; }
-  .child-count { font-size: 9px; background: #2a2a14; color: #f5c55b; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
-  .panel-children { border-bottom: 1px solid #1a1a2e; padding: 10px 20px; }
-  .panel-child-card { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; margin: 3px 0; background: #12121c; border: 1px solid #1e1e30; border-radius: 5px; cursor: pointer; font-size: 10px; }
-  .panel-child-card:hover { border-color: #3a3a5e; }
-  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; padding: 10px; } .panel { width: 100vw; } }
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #0d0d14;
+  --bg-tertiary: #12121c;
+  --border-primary: #1a1a2e;
+  --border-secondary: #1e1e30;
+  --border-hover: #3a3a5e;
+  --text-primary: #e0e0e8;
+  --text-secondary: #bbb;
+  --text-muted: #888;
+  --text-faded: #555;
+  --text-dim: #333;
+  --accent: #7c6ff7;
+  --accent-hover: #9d93ff;
+  --green: #4ade80;
+  --yellow: #f59e0b;
+  --red: #ef4444;
+  --blue: #5b9cf5;
+  --purple: #c55bf5;
+  --orange: #ff8c00;
+}
+
+[data-theme="light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --bg-tertiary: #f1f3f5;
+  --border-primary: #dee2e6;
+  --border-secondary: #ced4da;
+  --border-hover: #868e96;
+  --text-primary: #212529;
+  --text-secondary: #495057;
+  --text-muted: #6c757d;
+  --text-faded: #adb5bd;
+  --text-dim: #dee2e6;
+  --accent: #6c5ce7;
+  --accent-hover: #5a4fcf;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  line-height: 1.4;
+}
+
+.header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  background: var(--bg-primary);
+  z-index: 50;
+}
+
+.header h1 {
+  font-size: 18px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header h1 span { color: var(--accent); }
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--green);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn:hover {
+  background: var(--border-secondary);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.btn.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.btn.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.theme-toggle {
+  font-size: 16px;
+  padding: 4px 8px;
+}
+
+.cost-dashboard {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+}
+
+.cost-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.cost-stat {
+  text-align: center;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  border: 1px solid var(--border-primary);
+}
+
+.cost-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 2px;
+}
+
+.cost-label {
+  font-size: 9px;
+  color: var(--text-faded);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.api-keys {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.api-key {
+  font-size: 10px;
+  padding: 4px 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.api-key.active {
+  border-color: var(--green);
+  background: rgba(74, 222, 128, 0.1);
+}
+
+.key-status {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.toolbar {
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.search-box {
+  flex: 1;
+  min-width: 200px;
+  position: relative;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-faded);
+  font-size: 14px;
+}
+
+.view-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.view-toggle {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  padding: 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.view-toggle:hover,
+.view-toggle.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.sort-dropdown {
+  position: relative;
+}
+
+.sort-select {
+  appearance: none;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-primary);
+  padding: 6px 24px 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.filter-bar {
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  background: var(--bg-secondary);
+}
+
+.filter-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-faded);
+  padding: 4px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 11px;
+  transition: all 0.2s;
+}
+
+.filter-btn:hover,
+.filter-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.main-content {
+  display: flex;
+  height: calc(100vh - 200px);
+  overflow: hidden;
+}
+
+.sessions-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.sessions-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.grid-view {
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+}
+
+.list-view {
+  grid-template-columns: 1fr;
+}
+
+.session-card {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+}
+
+.session-card:hover {
+  border-color: var(--border-hover);
+}
+
+.session-card.active {
+  border-color: var(--green);
+  box-shadow: 0 0 0 1px rgba(74, 222, 128, 0.2);
+}
+
+.session-card.expanded {
+  border-color: var(--accent);
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.card-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.status-dot.status-running { background: var(--green); animation: pulse 2s infinite; }
+.status-dot.status-idle { background: var(--yellow); }
+.status-dot.status-completed { background: var(--text-dim); }
+.status-dot.status-failed { background: var(--red); }
+
+.session-card.status-running { border-left: 3px solid var(--green); }
+.session-card.status-idle { border-left: 3px solid var(--yellow); }
+.session-card.status-completed { border-left: 3px solid var(--text-dim); }
+.session-card.status-failed { border-left: 3px solid var(--red); }
+
+.pin-btn {
+  background: none;
+  border: none;
+  color: var(--text-faded);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.pin-btn:hover {
+  color: var(--accent);
+  background: var(--bg-secondary);
+}
+
+.pin-btn.pinned {
+  color: var(--yellow);
+}
+
+.card-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.badge {
+  font-size: 9px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.badge-main { background: #1a4424; color: var(--green); }
+.badge-group { background: #1a2744; color: var(--blue); }
+.badge-cron { background: #2a2a14; color: var(--yellow); }
+.badge-run { background: #2a2a14; color: var(--yellow); }
+.badge-subagent { background: #2a1444; color: var(--purple); }
+.badge-telegram { background: #1a2744; color: var(--blue); }
+
+.model-pill {
+  font-size: 9px;
+  padding: 2px 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+.card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--text-faded);
+}
+
+.token-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.token-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--bg-secondary);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+
+.token-fill-in {
+  height: 100%;
+  background: var(--blue);
+  float: left;
+}
+
+.token-fill-out {
+  height: 100%;
+  background: var(--accent);
+  float: left;
+}
+
+.token-text {
+  font-size: 9px;
+  color: var(--text-faded);
+  white-space: nowrap;
+}
+
+.cost-display {
+  font-size: 10px;
+  color: var(--yellow);
+  font-weight: 600;
+}
+
+.activity-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-primary);
+  padding-top: 8px;
+}
+
+.activity-item {
+  font-size: 11px;
+  padding: 3px 0;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.activity-action {
+  color: var(--accent);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.activity-detail {
+  color: var(--text-faded);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 10px;
+  flex: 1;
+}
+
+.activity-time {
+  color: var(--text-dim);
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.children-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-primary);
+  padding-top: 8px;
+}
+
+.children-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.children-label {
+  font-size: 11px;
+  color: var(--text-faded);
+  font-weight: 600;
+}
+
+.expand-icon {
+  transition: transform 0.2s;
+  color: var(--text-faded);
+}
+
+.children-section.expanded .expand-icon {
+  transform: rotate(90deg);
+}
+
+.children-list {
+  display: none;
+  gap: 4px;
+  flex-direction: column;
+}
+
+.children-section.expanded .children-list {
+  display: flex;
+}
+
+.child-item {
+  font-size: 10px;
+  padding: 6px 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+}
+
+.child-item:hover {
+  border-color: var(--border-hover);
+  background: var(--border-primary);
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.breadcrumb-item {
+  color: var(--text-faded);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.breadcrumb-item:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.breadcrumb-separator {
+  color: var(--text-dim);
+}
+
+/* Detail Panel */
+.detail-panel {
+  width: 500px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-primary);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.panel-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--bg-secondary);
+}
+
+.panel-title {
+  font-size: 16px;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.panel-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.jump-to-latest {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 48px;
+  height: 48px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: all 0.2s;
+  z-index: 100;
+}
+
+.jump-to-latest:hover {
+  background: var(--accent-hover);
+  transform: translateY(-2px);
+}
+
+.panel-meta {
+  padding: 12px 20px;
+  font-size: 11px;
+  color: var(--text-faded);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--bg-tertiary);
+}
+
+.log-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+
+.log-entry {
+  margin: 16px 0;
+  padding-left: 12px;
+  border-left: 3px solid var(--border-primary);
+}
+
+.log-entry.role-user { border-color: var(--blue); }
+.log-entry.role-assistant { border-color: var(--accent); }
+.log-entry.role-tool { border-color: var(--yellow); }
+
+.log-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 12px;
+}
+
+.log-role {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.role-user { background: var(--blue); color: white; }
+.role-assistant { background: var(--accent); color: white; }
+.role-tool { background: var(--yellow); color: black; }
+
+.log-timestamp {
+  font-size: 9px;
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.log-content {
+  margin-bottom: 8px;
+}
+
+.log-text {
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--text-secondary);
+}
+
+.log-text h1, .log-text h2, .log-text h3 {
+  margin: 12px 0 8px;
+  color: var(--text-primary);
+}
+
+.log-text p {
+  margin: 8px 0;
+}
+
+.log-text ul, .log-text ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.log-text code {
+  background: var(--bg-tertiary);
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 12px;
+}
+
+.log-text pre {
+  background: var(--bg-tertiary);
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--border-primary);
+}
+
+.log-text pre code {
+  background: none;
+  padding: 0;
+}
+
+.log-text a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.log-text a:hover {
+  text-decoration: underline;
+}
+
+.tool-call {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  margin: 8px 0;
+  overflow: hidden;
+}
+
+.tool-header {
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tool-name {
+  font-size: 12px;
+  color: var(--yellow);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tool-toggle {
+  color: var(--text-faded);
+  transition: transform 0.2s;
+}
+
+.tool-call.expanded .tool-toggle {
+  transform: rotate(180deg);
+}
+
+.tool-content {
+  display: none;
+}
+
+.tool-call.expanded .tool-content {
+  display: block;
+}
+
+.tool-args, .tool-result {
+  padding: 10px 12px;
+  font-size: 11px;
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.tool-args {
+  color: var(--text-muted);
+  background: var(--bg-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.tool-result {
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.tool-pending {
+  padding: 8px 12px;
+  color: var(--text-faded);
+  font-style: italic;
+  font-size: 11px;
+  background: var(--bg-primary);
+}
+
+.copy-btn {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  color: var(--text-faded);
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 9px;
+  transition: all 0.2s;
+}
+
+.copy-btn:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.image-preview {
+  max-width: 100%;
+  max-height: 300px;
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+  margin: 8px 0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.image-preview:hover {
+  border-color: var(--accent);
+}
+
+.thinking-block {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  padding: 8px 12px;
+  margin: 8px 0;
+  font-style: italic;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.log-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 10px;
+  color: var(--text-faded);
+}
+
+.log-cost {
+  color: var(--yellow);
+  font-weight: 600;
+}
+
+.log-tokens {
+  color: var(--text-faded);
+}
+
+.log-model {
+  color: var(--text-dim);
+}
+
+.loading-spinner {
+  text-align: center;
+  padding: 40px;
+  color: var(--text-faded);
+}
+
+.spinner-dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.spinner-dot {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite;
+}
+
+.spinner-dot:nth-child(2) { animation-delay: 0.16s; }
+.spinner-dot:nth-child(3) { animation-delay: 0.32s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); opacity: 0.3; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* Toast Notifications */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.toast {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  min-width: 300px;
+  max-width: 400px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(100%);
+  transition: transform 0.3s ease;
+}
+
+.toast.show {
+  transform: translateX(0);
+}
+
+.toast.success { border-color: var(--green); }
+.toast.error { border-color: var(--red); }
+.toast.info { border-color: var(--blue); }
+
+.toast-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.toast.success .toast-icon { color: var(--green); }
+.toast.error .toast-icon { color: var(--red); }
+.toast.info .toast-icon { color: var(--blue); }
+
+.toast-content {
+  flex: 1;
+}
+
+.toast-title {
+  font-weight: 600;
+  margin-bottom: 2px;
+  font-size: 12px;
+}
+
+.toast-message {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.toast-close {
+  background: none;
+  border: none;
+  color: var(--text-faded);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  width: 20px;
+  height: 20px;
+}
+
+/* Timeline View */
+.timeline-view {
+  padding: 20px;
+  display: none;
+}
+
+.timeline-view.active {
+  display: block;
+}
+
+.timeline {
+  position: relative;
+  margin: 20px 0;
+}
+
+.timeline-axis {
+  position: relative;
+  height: 60px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  border: 1px solid var(--border-primary);
+}
+
+.timeline-session {
+  position: absolute;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 4px;
+  top: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 10px;
+  color: white;
+  transition: all 0.2s;
+}
+
+.timeline-session:hover {
+  height: 24px;
+  top: 18px;
+  z-index: 10;
+}
+
+/* Mobile Styles */
+@media (max-width: 768px) {
+  .main-content {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .detail-panel {
+    width: 100%;
+    height: 50vh;
+  }
+  
+  .sessions-grid {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .toolbar {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .search-box {
+    min-width: 0;
+  }
+  
+  .cost-stats {
+    grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  }
+}
+
+/* Keyboard Navigation */
+.session-card.keyboard-focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Hidden */
+.hidden { display: none !important; }
+
+/* Animation for expanding cards */
+@keyframes expand {
+  from { 
+    max-height: 200px;
+    opacity: 0.8;
+  }
+  to { 
+    max-height: 1000px;
+    opacity: 1;
+  }
+}
+
+.session-card.expanding .children-list {
+  animation: expand 0.3s ease-out;
+}
+
+.settings-panel {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 8px;
+  padding: 16px;
+  margin: 16px 0;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 8px 0;
+}
+
+.setting-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 20px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-secondary);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toggle-switch.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.toggle-knob {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 1px;
+  left: 1px;
+  transition: transform 0.2s;
+}
+
+.toggle-switch.on .toggle-knob {
+  transform: translateX(20px);
+}
+
+/* Status bar at bottom */
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-size: 10px;
+  color: var(--text-faded);
+  z-index: 50;
+}
+
+.status-left {
+  display: flex;
+  gap: 16px;
+}
+
+.status-right {
+  display: flex;
+  gap: 16px;
+}
+
+.ws-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ws-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.ws-indicator.connected {
+  background: var(--green);
+}
 </style>
 </head>
-<body>
-<div class="header">
-  <h1>😮‍💨 <span>Cozy</span> Sessions <span class="live-dot"></span></h1>
-  <div class="controls">
-    <span class="ts" id="lastUp"></span>
-    <button class="refresh-btn" onclick="load()">↻</button>
-  </div>
-</div>
-<div class="stats-bar">
-  <div class="stat"><div class="stat-value" id="sT">-</div><div class="stat-label">Total</div></div>
-  <div class="stat"><div class="stat-value" id="sA">-</div><div class="stat-label">Active</div></div>
-  <div class="stat"><div class="stat-value" id="sR">-</div><div class="stat-label">1h</div></div>
-  <div class="stat"><div class="stat-value" id="sG">-</div><div class="stat-label">Groups</div></div>
-  <div class="stat"><div class="stat-value" id="sC">-</div><div class="stat-label">Crons</div></div>
-  <div class="stat"><div class="stat-value" id="sCR">-</div><div class="stat-label">Runs</div></div>
-  <div class="stat"><div class="stat-value" id="sSA">-</div><div class="stat-label">Sub-agents</div></div>
-  <div class="stat"><div class="stat-value" id="sD">-</div><div class="stat-label">Direct</div></div>
-  <div style="margin-left:auto;display:flex;align-items:center;gap:6px" id="authKeys"></div>
-</div>
-<div class="filter-bar">
-  <button class="fbtn on" onclick="filt('all',this)">All</button>
-  <button class="fbtn" onclick="filt('active',this)">🟢 Active</button>
-  <button class="fbtn" onclick="filt('recent',this)">🟡 Recent</button>
-  <button class="fbtn" onclick="filt('group',this)">💬 Groups</button>
-  <button class="fbtn" onclick="filt('cron',this)">⏰ Crons</button>
-  <button class="fbtn" onclick="filt('cron-run',this)">🔁 Runs</button>
-  <button class="fbtn" onclick="filt('subagent',this)">🤖 Sub-agents</button>
-  <button class="fbtn" onclick="filt('direct',this)">👤 Direct</button>
-  <button class="fbtn" onclick="filt('busy',this)">⚡ Busy</button>
-</div>
-<div class="grid" id="grid"></div>
+<body data-theme="dark">
 
-<div class="panel-overlay" id="panelOverlay" onclick="if(event.target===this)closePanel()">
-  <div class="panel">
-    <div class="panel-header">
-      <h2 id="panelTitle">Session Log</h2>
-      <button class="panel-close" onclick="closePanel()">✕ Close</button>
-    </div>
-    <div class="panel-meta" id="panelMeta"></div>
-    <div class="log" id="panelLog"><div class="log-loading">Loading...</div></div>
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="header">
+  <h1>
+    🔮 <span>OpenClaw</span> Sessions
+    <div class="live-dot"></div>
+  </h1>
+  
+  <div class="controls">
+    <button class="btn" id="settingsBtn" onclick="toggleSettings()">⚙️ Settings</button>
+    <button class="btn theme-toggle" onclick="toggleTheme()">🌙</button>
+    <button class="btn" onclick="refreshData()">🔄 Refresh</button>
   </div>
 </div>
+
+<div class="cost-dashboard">
+  <div class="cost-stats">
+    <div class="cost-stat">
+      <div class="cost-value" id="costToday">$0.00</div>
+      <div class="cost-label">Today</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-value" id="costWeek">$0.00</div>
+      <div class="cost-label">This Week</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-value" id="costMonth">$0.00</div>
+      <div class="cost-label">This Month</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-value" id="activeCount">0</div>
+      <div class="cost-label">Active</div>
+    </div>
+    <div class="cost-stat">
+      <div class="cost-value" id="totalSessions">0</div>
+      <div class="cost-label">Total</div>
+    </div>
+  </div>
+  
+  <div class="api-keys" id="apiKeys"></div>
+</div>
+
+<div class="toolbar">
+  <div class="search-box">
+    <div class="search-icon">🔍</div>
+    <input type="text" class="search-input" placeholder="Search sessions..." 
+           id="searchInput" onkeyup="handleSearch()">
+  </div>
+  
+  <div class="view-controls">
+    <div class="sort-dropdown">
+      <select class="sort-select" id="sortSelect" onchange="handleSort()">
+        <option value="lastActive">📅 Last Active</option>
+        <option value="cost">💰 Cost</option>
+        <option value="name">📝 Name</option>
+        <option value="tokens">🔤 Tokens</option>
+      </select>
+    </div>
+    
+    <button class="view-toggle active" id="gridView" onclick="setViewMode('grid')">
+      ⊞
+    </button>
+    <button class="view-toggle" id="listView" onclick="setViewMode('list')">
+      ☰
+    </button>
+    <button class="view-toggle" id="timelineView" onclick="setViewMode('timeline')">
+      📊
+    </button>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <button class="filter-btn active" onclick="setFilter('all', this)">All</button>
+  <button class="filter-btn" onclick="setFilter('pinned', this)">📌 Pinned</button>
+  <button class="filter-btn" onclick="setFilter('running', this)">🟢 Running</button>
+  <button class="filter-btn" onclick="setFilter('idle', this)">🟡 Idle</button>
+  <button class="filter-btn" onclick="setFilter('group', this)">💬 Groups</button>
+  <button class="filter-btn" onclick="setFilter('cron', this)">⏰ Crons</button>
+  <button class="filter-btn" onclick="setFilter('subagent', this)">🤖 Sub-agents</button>
+  <button class="filter-btn" onclick="setFilter('main', this)">🏠 Main</button>
+</div>
+
+<div id="settingsPanel" class="settings-panel hidden">
+  <div class="setting-row">
+    <div class="setting-label">🔔 Sound Alerts</div>
+    <div class="toggle-switch" id="soundToggle" onclick="toggleSetting('sound')">
+      <div class="toggle-knob"></div>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">📱 Toast Notifications</div>
+    <div class="toggle-switch on" id="toastToggle" onclick="toggleSetting('toast')">
+      <div class="toggle-knob"></div>
+    </div>
+  </div>
+  <div class="setting-row">
+    <div class="setting-label">🏃 Auto-refresh</div>
+    <div class="toggle-switch on" id="autoRefreshToggle" onclick="toggleSetting('autoRefresh')">
+      <div class="toggle-knob"></div>
+    </div>
+  </div>
+</div>
+
+<div class="main-content">
+  <div class="sessions-panel">
+    <div class="breadcrumb" id="breadcrumb"></div>
+    
+    <div class="timeline-view" id="timelineContainer">
+      <div class="timeline" id="timeline"></div>
+    </div>
+    
+    <div class="sessions-grid grid-view" id="sessionsGrid">
+      <div class="loading-spinner">
+        Loading sessions<span class="spinner-dots">
+          <span class="spinner-dot"></span>
+          <span class="spinner-dot"></span>
+          <span class="spinner-dot"></span>
+        </span>
+      </div>
+    </div>
+  </div>
+  
+  <div class="detail-panel" id="detailPanel" style="display: none;">
+    <div class="panel-header">
+      <div class="panel-title" id="panelTitle">Select a session</div>
+      <div class="panel-controls">
+        <button class="btn" onclick="copyTranscript()">📋 Copy</button>
+        <button class="btn" onclick="closeDetailPanel()">✕</button>
+      </div>
+    </div>
+    
+    <div class="panel-meta" id="panelMeta"></div>
+    
+    <div class="log-container" id="logContainer">
+      <div class="loading-spinner">
+        Loading transcript...
+      </div>
+    </div>
+  </div>
+</div>
+
+<button class="jump-to-latest" id="jumpToLatest" onclick="jumpToLatest()">↓</button>
+
+<div class="status-bar">
+  <div class="status-left">
+    <div id="sessionCount">0 sessions</div>
+    <div id="lastUpdate">Never updated</div>
+  </div>
+  <div class="status-right">
+    <div class="ws-status">
+      <div class="ws-indicator" id="wsIndicator"></div>
+      <span id="wsStatus">Connecting...</span>
+    </div>
+    <div id="keyboardHelp">Press ? for shortcuts</div>
+  </div>
+</div>
+
+<audio id="alertSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAABAC..." type="audio/wav">
+</audio>
 
 <script>
-let F='all', ALL=[];
+// Global state
+let allSessions = [];
+let filteredSessions = [];
+let currentFilter = 'all';
+let currentSort = 'lastActive';
+let currentViewMode = 'grid';
+let searchTerm = '';
+let selectedSession = null;
+let webSocket = null;
+let keyboardFocusIndex = -1;
+let settings = {
+  sound: false,
+  toast: true,
+  autoRefresh: true
+};
 
-function ago(ts) {
-  if (!ts) return '—';
-  const t = typeof ts === 'string' ? new Date(ts).getTime() : ts;
-  const d = Date.now() - t;
-  if (d < 0) return 'now';
-  const s = d/1000|0;
-  if (s < 60) return s+'s';
-  const m = s/60|0;
-  if (m < 60) return m+'m';
-  const h = m/60|0;
-  if (h < 24) return h+'h';
-  return (h/24|0)+'d';
-}
-
-function typ(k, s) {
-  if (s && s.sessionType) return s.sessionType;
-  if (k.includes(':subagent:')) return 'subagent';
-  if (k.includes(':cron:') && k.includes(':run:')) return 'cron-run';
-  if (k.includes(':cron:')) return 'cron';
-  if (k.includes(':topic:') || k.includes('group:')) return 'group';
-  if (k === 'agent:main:main') return 'main';
-  return 'direct';
-}
-
-function dot(u) {
-  const a = Date.now() - u;
-  if (a < 300000) return 'd-active';
-  if (a < 3600000) return 'd-recent';
-  return 'd-idle';
-}
-
-function name(k, s) {
-  if (s.label) return s.label;
-  if (s.subject) {
-    const t = k.match(/topic:(\d+)/)?.[1];
-    return s.subject + (t && t !== '1' ? ' #'+t : '');
-  }
-  if (s.displayName) return s.displayName.replace('telegram:','');
-  if (k.includes(':main:main')) return '💬 Main DM';
-  const c = k.match(/cron:(.{8})/)?.[1];
-  if (c) return 'Cron '+c+'…';
-  return k.split(':').slice(-2).join(':');
-}
-
-function badge(t) {
-  const cls = t==='group'?'bg':t==='cron'?'bc':t==='cron-run'?'bc':t==='subagent'?'bs':t==='main'?'bd':'bd';
-  const label = t==='cron-run'?'run':t==='subagent'?'sub-agent':t;
-  return `<span class="badge ${cls}">${label}</span>`;
-}
-
-function actHTML(acts) {
-  if (!acts || !acts.length) return '';
-  return `<div class="activity">${acts.map(a => {
-    let detail = a.detail ? `<span class="act-detail">${esc(a.detail)}</span>` : '';
-    let time = a.ts ? `<span class="act-time">${ago(a.ts)}</span>` : '';
-    let cost = a.cost > 0 ? `<span class="act-cost">$${a.cost.toFixed(3)}</span>` : '';
-    return `<div class="act-item">
-      <span class="act-action">${a.action||'—'}</span>
-      ${detail}${cost}${time}
-    </div>`;
-  }).join('')}</div>`;
-}
-
-function esc(s) { return s.replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-function filt(f, el) {
-  F = f;
-  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('on'));
-  el.classList.add('on');
-  draw();
-}
-
-function draw() {
-  const now = Date.now();
-  let list = ALL;
-  if (F==='active') list=ALL.filter(s=>now-s.updatedAt<300000);
-  else if (F==='recent') list=ALL.filter(s=>now-s.updatedAt<3600000);
-  else if (F==='group') list=ALL.filter(s=>typ(s.key,s)==='group');
-  else if (F==='cron') list=ALL.filter(s=>typ(s.key,s)==='cron');
-  else if (F==='cron-run') list=ALL.filter(s=>typ(s.key,s)==='cron-run');
-  else if (F==='subagent') list=ALL.filter(s=>typ(s.key,s)==='subagent');
-  else if (F==='direct') list=ALL.filter(s=>['direct','main'].includes(typ(s.key,s)));
-  else if (F==='busy') list=ALL.filter(s=>s.activity&&s.activity.length);
-
-  const g = document.getElementById('grid');
-  if (!list.length) { g.innerHTML='<div class="empty">No sessions</div>'; return; }
+// Initialize
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  initWebSocket();
+  refreshData();
+  setupKeyboardShortcuts();
   
-  g.innerHTML = list.map(s => {
-    const t = typ(s.key, s);
-    const isActive = Date.now() - s.updatedAt < 300000;
-    const idx = ALL.indexOf(s);
-    
-    // Parent link for cron runs
-    let parentHTML = '';
-    if (s.parentKey && s.parentLabel) {
-      parentHTML = `<div class="parent-link" onclick="event.stopPropagation();openSessionByKey('${esc(s.parentKey)}')">↑ ${esc(s.parentLabel)}</div>`;
+  // Auto-refresh every 30 seconds if enabled
+  setInterval(() => {
+    if (settings.autoRefresh) {
+      refreshData();
     }
-    
-    // Children summary (cron runs + sub-agents)
-    let childrenHTML = '';
-    if (s.childCount > 0) {
-      const recentChildren = (s.children || []).slice(0, 3);
-      const hasSubagents = recentChildren.some(c => c.key && c.key.includes(':subagent:'));
-      const hasCronRuns = recentChildren.some(c => c.key && c.key.includes(':run:'));
-      const childLabel = hasSubagents && hasCronRuns ? 'children' : hasSubagents ? 'sub-agent' + (s.childCount>1?'s':'') : 'run' + (s.childCount>1?'s':'');
-      const childIcon = hasSubagents ? '🤖' : '🔁';
-      childrenHTML = `<div class="children-section">
-        <div class="children-label">${childIcon} ${s.childCount} ${childLabel}</div>
-        ${recentChildren.map(c => {
-          const isSubagent = c.key && c.key.includes(':subagent:');
-          return `<div class="child-item" onclick="event.stopPropagation();openSessionByKey('${esc(c.key)}')">
-          <span class="child-name"><span class="dot ${dot(c.updatedAt)}"></span>${isSubagent ? '🤖 ' : ''}${c.label || (c.sessionId ? c.sessionId.slice(0,8) : '—')}</span>
-          <span class="child-time">${ago(c.updatedAt)} ago</span>
-        </div>`;
-        }).join('')}
-        ${s.childCount > 3 ? `<div style="font-size:9px;color:#444;padding:2px 6px">+${s.childCount-3} more</div>` : ''}
-      </div>`;
-    }
-    
-    return `<div class="card${isActive?' is-active':''}" onclick="openSession('${esc(s.key)}',ALL[${idx}])" style="cursor:pointer">
-      <div class="card-top">
-        <div class="card-name"><span class="dot ${dot(s.updatedAt)}"></span>${name(s.key,s)}${s.childCount?'<span class="child-count">'+s.childCount+' '+(s.children?.some(c=>c.key?.includes(':subagent:'))?'sub-agents':'runs')+'</span>':''}</div>
-        ${badge(t)}
-      </div>
-      <div class="meta">
-        <span>📡 ${s.channel||'—'}</span>
-        <span>⏱ ${ago(s.updatedAt)} ago</span>
-      </div>
-      ${parentHTML}
-      ${actHTML(s.activity)}
-      ${childrenHTML}
-    </div>`;
-  }).join('');
+  }, 30000);
+});
+
+// Settings management
+function loadSettings() {
+  const saved = localStorage.getItem('dashboard-settings');
+  if (saved) {
+    settings = {...settings, ...JSON.parse(saved)};
+  }
+  updateSettingsUI();
 }
 
-async function load() {
+function saveSettings() {
+  localStorage.setItem('dashboard-settings', JSON.stringify(settings));
+}
+
+function updateSettingsUI() {
+  document.getElementById('soundToggle').classList.toggle('on', settings.sound);
+  document.getElementById('toastToggle').classList.toggle('on', settings.toast);
+  document.getElementById('autoRefreshToggle').classList.toggle('on', settings.autoRefresh);
+}
+
+function toggleSetting(key) {
+  settings[key] = !settings[key];
+  saveSettings();
+  updateSettingsUI();
+}
+
+function toggleSettings() {
+  document.getElementById('settingsPanel').classList.toggle('hidden');
+}
+
+// Theme management
+function toggleTheme() {
+  const currentTheme = document.body.getAttribute('data-theme');
+  const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  document.body.setAttribute('data-theme', newTheme);
+  
+  const btn = document.querySelector('.theme-toggle');
+  btn.textContent = newTheme === 'dark' ? '🌙' : '☀️';
+  
+  localStorage.setItem('theme', newTheme);
+}
+
+// Load saved theme
+const savedTheme = localStorage.getItem('theme') || 'dark';
+document.body.setAttribute('data-theme', savedTheme);
+document.querySelector('.theme-toggle').textContent = savedTheme === 'dark' ? '🌙' : '☀️';
+
+// WebSocket connection
+function initWebSocket() {
   try {
-    const r = await fetch('/data/sessions.json?t='+Date.now());
-    const d = await r.json();
-    ALL = (d.sessions||[]).sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+    webSocket = new WebSocket('ws://localhost:3848');
     
-    const now = Date.now();
-    const a=ALL.filter(s=>now-s.updatedAt<300000).length;
-    const re=ALL.filter(s=>now-s.updatedAt<3600000).length;
-    const gr=ALL.filter(s=>typ(s.key,s)==='group').length;
-    const cr=ALL.filter(s=>typ(s.key,s)==='cron').length;
-    const crr=ALL.filter(s=>typ(s.key,s)==='cron-run').length;
-    const sa=ALL.filter(s=>typ(s.key,s)==='subagent').length;
-    const di=ALL.filter(s=>['direct','main'].includes(typ(s.key,s))).length;
+    webSocket.onopen = () => {
+      document.getElementById('wsIndicator').classList.add('connected');
+      document.getElementById('wsStatus').textContent = 'Connected';
+    };
     
-    document.getElementById('sT').textContent=ALL.length;
-    document.getElementById('sA').textContent=a;
-    document.getElementById('sR').textContent=re;
-    document.getElementById('sG').textContent=gr;
-    document.getElementById('sC').textContent=cr;
-    document.getElementById('sCR').textContent=crr;
-    document.getElementById('sSA').textContent=sa;
-    document.getElementById('sD').textContent=di;
-    document.getElementById('lastUp').textContent=new Date().toLocaleTimeString();
-    
-    // Show API keys
-    const auth = d.auth || {};
-    const order = auth.order || {};
-    const keysEl = document.getElementById('authKeys');
-    let keysHTML = '<span style="font-size:9px;color:#444">🔑 Keys:</span>';
-    for (const [provider, keys] of Object.entries(order)) {
-      for (let i = 0; i < keys.length; i++) {
-        const name = keys[i].replace(provider + ':', '');
-        keysHTML += `<span style="font-size:9px;padding:2px 6px;background:#1a1a2e;border-radius:3px;color:${i===0?'#4ade80':'#555'}">${i===0?'▶ ':''}${name}</span>`;
+    webSocket.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'sessions_updated') {
+        refreshData();
+        if (settings.toast) {
+          showToast('info', 'Sessions Updated', 'New activity detected');
+        }
       }
-    }
-    keysEl.innerHTML = keysHTML;
+    };
     
-    draw();
-  } catch(e) { console.error(e); }
-}
-
-function openSessionByKey(key) {
-  const s = ALL.find(x => x.key === key);
-  if (s) openSession(key, s);
-}
-
-// Detail panel
-let panelSid = null;
-let panelInterval = null;
-let panelEntryCount = 0;
-
-async function openSession(key, s) {
-  const sid = s.sessionId;
-  if (!sid) return;
-  
-  panelSid = sid;
-  panelEntryCount = 0;
-  document.getElementById('panelOverlay').classList.add('open');
-  document.getElementById('panelTitle').textContent = name(key, s);
-  const sType = typ(key, s);
-  let metaHTML = `
-    <span>📡 ${s.channel||'—'}</span>
-    <span>🆔 ${sid.slice(0,8)}</span>
-    <span>⏱ ${ago(s.updatedAt)} ago</span>
-    <span>${sType.toUpperCase()}</span>
-    <span class="live-dot" style="margin-left:4px"></span>
-    <span style="color:#4ade80;font-size:9px">LIVE</span>
-  `;
-  if (s.parentKey && s.parentLabel) {
-    metaHTML += `<span class="parent-link" onclick="openSessionByKey('${esc(s.parentKey)}')">↑ Parent: ${esc(s.parentLabel)}</span>`;
+    webSocket.onclose = () => {
+      document.getElementById('wsIndicator').classList.remove('connected');
+      document.getElementById('wsStatus').textContent = 'Disconnected';
+      // Reconnect after 5 seconds
+      setTimeout(initWebSocket, 5000);
+    };
+    
+    webSocket.onerror = () => {
+      document.getElementById('wsStatus').textContent = 'Error';
+    };
+  } catch (e) {
+    console.warn('WebSocket not available, falling back to polling');
   }
-  document.getElementById('panelMeta').innerHTML = metaHTML;
-  
-  // Show children list in panel if this is a parent
-  let childrenPanel = '';
-  if (s.children && s.children.length) {
-    childrenPanel = `<div class="panel-children">
-      <div class="children-label">🔁 ${s.children.length} run${s.children.length>1?'s':''}</div>
-      ${s.children.slice(0, 10).map(c => `<div class="panel-child-card" onclick="openSessionByKey('${esc(c.key)}')">
-        <span><span class="dot ${dot(c.updatedAt)}"></span> ${c.label || c.sessionId?.slice(0,8) || '—'}</span>
-        <span style="color:#555">${ago(c.updatedAt)} ago</span>
-      </div>`).join('')}
-      ${s.children.length > 10 ? `<div style="font-size:9px;color:#444;padding:4px">+${s.children.length-10} more runs</div>` : ''}
-    </div>`;
-  }
-  
-  document.getElementById('panelLog').innerHTML = childrenPanel + '<div class="log-loading">Loading transcript...</div>';
-  
-  await loadTranscript(sid);
-  
-  // Start live polling every 3s
-  if (panelInterval) clearInterval(panelInterval);
-  panelInterval = setInterval(() => {
-    if (panelSid) loadTranscript(panelSid, true);
-  }, 3000);
 }
 
-async function loadTranscript(sid, isRefresh) {
+// Data fetching
+async function refreshData() {
   try {
-    const r = await fetch('/data/transcript/' + sid + '?t=' + Date.now());
-    const d = await r.json();
-    if (d.error) {
-      if (!isRefresh) document.getElementById('panelLog').innerHTML = `<div class="log-loading">Error: ${d.error}</div>`;
+    const response = await fetch('/data/sessions.json?t=' + Date.now());
+    const data = await response.json();
+    
+    if (data.error) {
+      showToast('error', 'Error', data.error);
       return;
     }
-    const entries = d.entries || [];
-    // Only re-render if new entries arrived
-    if (entries.length !== panelEntryCount) {
-      const wasAtBottom = isAtBottom();
-      panelEntryCount = entries.length;
-      renderLog(entries);
-      if (wasAtBottom || !isRefresh) scrollToBottom();
-    }
-  } catch(e) {
-    if (!isRefresh) document.getElementById('panelLog').innerHTML = `<div class="log-loading">Failed: ${e.message}</div>`;
+    
+    allSessions = data.sessions || [];
+    updateStats(data.stats || {});
+    updateApiKeys(data.auth || {});
+    applyFiltersAndSort();
+    
+    document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    document.getElementById('sessionCount').textContent = allSessions.length + ' sessions';
+    
+  } catch (error) {
+    showToast('error', 'Network Error', error.message);
   }
 }
 
-function isAtBottom() {
-  const el = document.getElementById('panelLog');
-  return el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+function updateStats(stats) {
+  document.getElementById('costToday').textContent = '$' + (stats.total_cost_today || 0).toFixed(2);
+  document.getElementById('costWeek').textContent = '$' + (stats.total_cost_week || 0).toFixed(2);  
+  document.getElementById('costMonth').textContent = '$' + (stats.total_cost_month || 0).toFixed(2);
+  document.getElementById('activeCount').textContent = stats.active_sessions || 0;
+  document.getElementById('totalSessions').textContent = allSessions.length;
 }
 
-function scrollToBottom() {
-  const el = document.getElementById('panelLog');
-  el.scrollTop = el.scrollHeight;
-}
-
-function closePanel() {
-  document.getElementById('panelOverlay').classList.remove('open');
-  panelSid = null;
-  panelEntryCount = 0;
-  if (panelInterval) { clearInterval(panelInterval); panelInterval = null; }
-}
-
-function renderLog(entries) {
-  const log = document.getElementById('panelLog');
-  if (!entries.length) { log.innerHTML = '<div class="log-loading">No entries</div>'; return; }
+function updateApiKeys(auth) {
+  const container = document.getElementById('apiKeys');
+  const order = auth.order || {};
   
-  // Build a map of tool call ID → result
+  let html = '<span style="margin-right: 12px; font-size: 11px; color: var(--text-faded);">🔑 API Keys:</span>';
+  
+  for (const [provider, keys] of Object.entries(order)) {
+    for (let i = 0; i < keys.length; i++) {
+      const keyName = keys[i].replace(provider + ':', '');
+      const isActive = i === 0;
+      html += `<div class="api-key ${isActive ? 'active' : ''}">
+        <div class="key-status"></div>
+        ${isActive ? '▶' : ''} ${keyName}
+      </div>`;
+    }
+  }
+  
+  container.innerHTML = html;
+}
+
+// Filtering and sorting
+function setFilter(filter, button) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  button.classList.add('active');
+  applyFiltersAndSort();
+}
+
+function handleSort() {
+  currentSort = document.getElementById('sortSelect').value;
+  applyFiltersAndSort();
+}
+
+function handleSearch() {
+  searchTerm = document.getElementById('searchInput').value.toLowerCase();
+  applyFiltersAndSort();
+}
+
+function applyFiltersAndSort() {
+  let sessions = [...allSessions];
+  
+  // Apply search filter
+  if (searchTerm) {
+    sessions = sessions.filter(s => 
+      (getSessionName(s).toLowerCase().includes(searchTerm)) ||
+      (s.key.toLowerCase().includes(searchTerm)) ||
+      (s.sessionId && s.sessionId.toLowerCase().includes(searchTerm))
+    );
+  }
+  
+  // Apply type filter
+  if (currentFilter !== 'all') {
+    sessions = sessions.filter(s => {
+      switch (currentFilter) {
+        case 'pinned': return s.pinned;
+        case 'running': return s.status === 'running';
+        case 'idle': return s.status === 'idle';
+        case 'group': return s.sessionType === 'telegram' || s.sessionType === 'group';
+        case 'cron': return s.sessionType === 'cron' || s.sessionType === 'cron-run';
+        case 'subagent': return s.sessionType === 'subagent';
+        case 'main': return s.sessionType === 'main';
+        default: return true;
+      }
+    });
+  }
+  
+  // Apply sorting
+  sessions.sort((a, b) => {
+    switch (currentSort) {
+      case 'lastActive':
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+      case 'name':
+        return getSessionName(a).localeCompare(getSessionName(b));
+      case 'cost':
+        return getTotalCost(b) - getTotalCost(a);
+      case 'tokens':
+        return getTotalTokens(b) - getTotalTokens(a);
+      default:
+        return 0;
+    }
+  });
+  
+  // Pinned sessions always go first (unless filtering by pinned)
+  if (currentFilter !== 'pinned') {
+    const pinned = sessions.filter(s => s.pinned);
+    const unpinned = sessions.filter(s => !s.pinned);
+    sessions = [...pinned, ...unpinned];
+  }
+  
+  filteredSessions = sessions;
+  renderSessions();
+}
+
+// View mode management
+function setViewMode(mode) {
+  currentViewMode = mode;
+  
+  document.querySelectorAll('.view-toggle').forEach(b => b.classList.remove('active'));
+  document.getElementById(mode + 'View').classList.add('active');
+  
+  const grid = document.getElementById('sessionsGrid');
+  const timeline = document.getElementById('timelineContainer');
+  
+  if (mode === 'timeline') {
+    grid.style.display = 'none';
+    timeline.classList.add('active');
+    renderTimeline();
+  } else {
+    grid.style.display = 'grid';
+    timeline.classList.remove('active');
+    
+    grid.className = `sessions-grid ${mode}-view`;
+    renderSessions();
+  }
+}
+
+// Session rendering
+function renderSessions() {
+  const container = document.getElementById('sessionsGrid');
+  
+  if (!filteredSessions.length) {
+    container.innerHTML = '<div class="loading-spinner">No sessions match your criteria</div>';
+    return;
+  }
+  
+  const html = filteredSessions.map((session, index) => createSessionCard(session, index)).join('');
+  container.innerHTML = html;
+}
+
+function createSessionCard(session, index) {
+  const name = getSessionName(session);
+  const status = session.status || 'completed';
+  const type = session.sessionType || 'other';
+  const isPinned = session.pinned;
+  const hasChildren = session.childCount > 0;
+  const totalCost = getTotalCost(session);
+  const totalTokens = getTotalTokens(session);
+  const model = getLastModel(session);
+  
+  // Token usage calculation
+  const tokensIn = getTokensIn(session);
+  const tokensOut = getTokensOut(session);
+  const totalTokensCalc = tokensIn + tokensOut;
+  const inPercent = totalTokensCalc ? (tokensIn / totalTokensCalc) * 100 : 0;
+  const outPercent = totalTokensCalc ? (tokensOut / totalTokensCalc) * 100 : 0;
+  
+  // Activity rendering
+  const activity = session.activity || [];
+  const activityHtml = activity.slice(0, 3).map(act => `
+    <div class="activity-item">
+      <div class="activity-action">${act.action || '—'}</div>
+      ${act.detail ? `<div class="activity-detail">${escapeHtml(act.detail)}</div>` : ''}
+      <div class="activity-time">${formatTime(act.ts)}</div>
+    </div>
+  `).join('');
+  
+  // Children rendering
+  const childrenHtml = hasChildren ? `
+    <div class="children-section" id="children-${index}">
+      <div class="children-toggle" onclick="toggleChildren(${index})">
+        <div class="children-label">
+          ${getChildrenIcon(session)} ${session.childCount} ${getChildrenLabel(session)}
+        </div>
+        <div class="expand-icon">▶</div>
+      </div>
+      <div class="children-list">
+        ${(session.children || []).slice(0, 5).map(child => `
+          <div class="child-item" onclick="openSession('${escapeHtml(child.key)}', event)">
+            <div>
+              <span class="status-dot status-${getChildStatus(child)}"></span>
+              ${getChildName(child)}
+            </div>
+            <div style="font-size: 9px; color: var(--text-dim)">
+              ${formatTime(child.updatedAt)} ago
+            </div>
+          </div>
+        `).join('')}
+        ${session.childCount > 5 ? `<div style="font-size: 9px; color: var(--text-faded); padding: 4px 8px;">+${session.childCount - 5} more</div>` : ''}
+      </div>
+    </div>
+  ` : '';
+  
+  return `
+    <div class="session-card status-${status}" data-index="${index}" onclick="openSession('${escapeHtml(session.key)}', event)">
+      <div class="card-header">
+        <div class="card-title">
+          <div class="status-dot status-${status}"></div>
+          <div class="card-name">${escapeHtml(name)}</div>
+        </div>
+        <div class="card-badges">
+          ${model ? `<div class="model-pill">${escapeHtml(model)}</div>` : ''}
+          <div class="badge badge-${type}">${formatBadgeLabel(type)}</div>
+          <button class="pin-btn ${isPinned ? 'pinned' : ''}" onclick="togglePin('${escapeHtml(session.key)}', event)">
+            ${isPinned ? '📌' : '📍'}
+          </button>
+        </div>
+      </div>
+      
+      <div class="card-meta">
+        <span>📡 ${session.channel || '—'}</span>
+        <span>⏱ ${formatTime(session.updatedAt)} ago</span>
+        <span>🆔 ${session.sessionId ? session.sessionId.slice(0, 8) : '—'}</span>
+      </div>
+      
+      ${totalTokensCalc ? `
+        <div class="token-summary">
+          <div class="token-bar">
+            <div class="token-fill-in" style="width: ${inPercent}%"></div>
+            <div class="token-fill-out" style="width: ${outPercent}%"></div>
+          </div>
+          <div class="token-text">${tokensIn}→${tokensOut}</div>
+          ${totalCost > 0 ? `<div class="cost-display">$${totalCost.toFixed(3)}</div>` : ''}
+        </div>
+      ` : ''}
+      
+      ${activityHtml ? `<div class="activity-section">${activityHtml}</div>` : ''}
+      ${childrenHtml}
+    </div>
+  `;
+}
+
+// Timeline rendering
+function renderTimeline() {
+  const container = document.getElementById('timeline');
+  
+  // Get time range for timeline
+  const now = Date.now();
+  const dayAgo = now - (24 * 60 * 60 * 1000);
+  
+  const activeSessions = filteredSessions.filter(s => s.updatedAt > dayAgo);
+  
+  if (!activeSessions.length) {
+    container.innerHTML = '<div style="text-align: center; padding: 40px; color: var(--text-faded);">No recent activity</div>';
+    return;
+  }
+  
+  const timelineHtml = activeSessions.map(session => {
+    const startTime = Math.max(session.updatedAt - (2 * 60 * 60 * 1000), dayAgo); // Assume 2h duration
+    const endTime = session.updatedAt;
+    
+    const leftPercent = ((startTime - dayAgo) / (now - dayAgo)) * 100;
+    const widthPercent = ((endTime - startTime) / (now - dayAgo)) * 100;
+    
+    return `
+      <div class="timeline-session" 
+           style="left: ${leftPercent}%; width: ${Math.max(widthPercent, 2)}%"
+           onclick="openSession('${escapeHtml(session.key)}', event)"
+           title="${escapeHtml(getSessionName(session))}">
+        ${escapeHtml(getSessionName(session)).slice(0, 20)}
+      </div>
+    `;
+  }).join('');
+  
+  container.innerHTML = `<div class="timeline-axis">${timelineHtml}</div>`;
+}
+
+// Session detail panel
+async function openSession(sessionKey, event) {
+  if (event) {
+    event.stopPropagation();
+  }
+  
+  const session = allSessions.find(s => s.key === sessionKey);
+  if (!session || !session.sessionId) {
+    showToast('error', 'Error', 'Session not found or no transcript available');
+    return;
+  }
+  
+  selectedSession = session;
+  
+  // Update breadcrumb
+  updateBreadcrumb(session);
+  
+  // Show panel
+  document.getElementById('detailPanel').style.display = 'flex';
+  document.getElementById('panelTitle').textContent = getSessionName(session);
+  
+  // Update meta info
+  const meta = document.getElementById('panelMeta');
+  meta.innerHTML = `
+    <span>📡 ${session.channel || '—'}</span>
+    <span>🆔 ${session.sessionId.slice(0, 8)}</span>
+    <span>⏱ ${formatTime(session.updatedAt)} ago</span>
+    <span class="badge badge-${session.sessionType || 'other'}">${formatBadgeLabel(session.sessionType || 'other')}</span>
+    ${session.status === 'running' ? '<span style="color: var(--green);">🟢 LIVE</span>' : ''}
+  `;
+  
+  // Load transcript
+  await loadTranscript(session.sessionId);
+}
+
+function updateBreadcrumb(session) {
+  const breadcrumb = document.getElementById('breadcrumb');
+  const parts = [];
+  
+  // Add main
+  parts.push({name: 'Main', key: 'main'});
+  
+  // Add parent if exists
+  if (session.parentKey && session.parentLabel) {
+    parts.push({name: session.parentLabel, key: session.parentKey});
+  }
+  
+  // Add current session
+  parts.push({name: getSessionName(session), key: session.key});
+  
+  const breadcrumbHtml = parts.map((part, index) => `
+    ${index > 0 ? '<span class="breadcrumb-separator">→</span>' : ''}
+    <span class="breadcrumb-item" onclick="${part.key !== session.key ? `navigateTo('${escapeHtml(part.key)}')` : ''}">${escapeHtml(part.name)}</span>
+  `).join('');
+  
+  breadcrumb.innerHTML = breadcrumbHtml;
+}
+
+function navigateTo(sessionKey) {
+  openSession(sessionKey);
+}
+
+async function loadTranscript(sessionId) {
+  const container = document.getElementById('logContainer');
+  container.innerHTML = '<div class="loading-spinner">Loading transcript...</div>';
+  
+  try {
+    const response = await fetch(`/data/transcript/${sessionId}?t=` + Date.now());
+    const data = await response.json();
+    
+    if (data.error) {
+      container.innerHTML = `<div class="loading-spinner">Error: ${data.error}</div>`;
+      return;
+    }
+    
+    renderTranscript(data.entries || []);
+    
+  } catch (error) {
+    container.innerHTML = `<div class="loading-spinner">Failed to load: ${error.message}</div>`;
+  }
+}
+
+function renderTranscript(entries) {
+  const container = document.getElementById('logContainer');
+  
+  if (!entries.length) {
+    container.innerHTML = '<div class="loading-spinner">No entries found</div>';
+    return;
+  }
+  
+  // Build result map
   const resultMap = {};
-  for (const e of entries) {
-    for (const c of (e.content || [])) {
-      if (c.type === 'result' && c.id) resultMap[c.id] = c;
-    }
-  }
+  entries.forEach(entry => {
+    (entry.content || []).forEach(c => {
+      if (c.type === 'result' && c.id) {
+        resultMap[c.id] = c;
+      }
+    });
+  });
   
-  // Track which results we've already rendered (linked to their call)
   const renderedResults = new Set();
   
-  log.innerHTML = entries.map(e => {
-    const role = e.role || 'system';
-    const roleClass = role === 'user' ? 'role-user' : role === 'assistant' ? 'role-assistant' : 'role-tool';
-    const roleLabelClass = role === 'user' ? 'r-user' : 'r-assistant';
+  const html = entries.map(entry => {
+    const role = entry.role || 'system';
+    let contentHtml = '';
     
-    let contentHTML = '';
-    for (const c of (e.content || [])) {
+    (entry.content || []).forEach(c => {
       if (c.type === 'tool') {
-        const argsStr = typeof c.args === 'object' ? JSON.stringify(c.args, null, 2) : String(c.args || '');
         const result = resultMap[c.id];
-        let resultHTML = '';
+        let resultHtml = '';
+        
         if (result) {
           renderedResults.add(c.id);
-          resultHTML = `<div class="log-tool-result">
-            <div class="log-tool-result-label">✅ Result</div>
-            <div class="log-tool-result-text">${esc(result.text || '(empty)')}</div>
-          </div>`;
+          resultHtml = `
+            <div class="tool-content">
+              <div class="tool-args">${escapeHtml(JSON.stringify(c.args || {}, null, 2))}</div>
+              <div class="tool-result">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                  <span style="color: var(--green); font-weight: 600; font-size: 10px;">✅ RESULT</span>
+                  <button class="copy-btn" onclick="copyText('${escapeHtml(result.text || '')}')">📋</button>
+                </div>
+                ${escapeHtml(result.text || '(empty)')}
+              </div>
+            </div>
+          `;
         } else {
-          resultHTML = `<div class="log-tool-pending">⏳ Waiting for result…</div>`;
+          resultHtml = `
+            <div class="tool-content">
+              <div class="tool-args">${escapeHtml(JSON.stringify(c.args || {}, null, 2))}</div>
+              <div class="tool-pending">⏳ Waiting for result...</div>
+            </div>
+          `;
         }
-        contentHTML += `<div class="log-tool-group">
-          <div class="log-tool-call">
-            <div class="log-tool-name">🔧 ${esc(c.name)}</div>
-            <div class="log-tool-args">${esc(argsStr)}</div>
+        
+        contentHtml += `
+          <div class="tool-call" onclick="toggleToolCall(this)">
+            <div class="tool-header">
+              <div class="tool-name">🔧 ${escapeHtml(c.name)}</div>
+              <div class="tool-toggle">▼</div>
+            </div>
+            ${resultHtml}
           </div>
-          ${resultHTML}
-        </div>`;
-      } else if (c.type === 'result') {
-        // Skip if already rendered linked to its call
-        if (renderedResults.has(c.id)) continue;
-        contentHTML += `<div class="log-tool-group">
-          <div class="log-tool-result">
-            <div class="log-tool-result-label">✅ ${esc(c.name)}</div>
-            <div class="log-tool-result-text">${esc(c.text || '(empty)')}</div>
+        `;
+        
+      } else if (c.type === 'result' && !renderedResults.has(c.id)) {
+        contentHtml += `
+          <div class="tool-call expanded">
+            <div class="tool-header">
+              <div class="tool-name">✅ ${escapeHtml(c.name)}</div>
+              <button class="copy-btn" onclick="copyText('${escapeHtml(c.text || '')}')">📋</button>
+            </div>
+            <div class="tool-content">
+              <div class="tool-result">${escapeHtml(c.text || '(empty)')}</div>
+            </div>
           </div>
-        </div>`;
+        `;
+        
       } else if (c.type === 'text') {
-        contentHTML += `<div class="log-text">${esc(c.text)}</div>`;
+        const markdownHtml = marked.parse(c.text || '');
+        contentHtml += `
+          <div class="log-text">${markdownHtml}</div>
+          <button class="copy-btn" onclick="copyText('${escapeHtml(c.text || '')}')">📋 Copy</button>
+        `;
+        
       } else if (c.type === 'image') {
-        contentHTML += `<div style="margin:4px 0"><img src="${esc(c.url)}" style="max-width:100%;max-height:300px;border-radius:6px;border:1px solid #1e1e30" onerror="this.outerHTML='<span style=color:#555>🖼 Image: '+this.src+'</span>'"></div>`;
+        contentHtml += `
+          <img class="image-preview" src="${escapeHtml(c.url)}" 
+               onclick="window.open('${escapeHtml(c.url)}', '_blank')"
+               onerror="this.outerHTML='<span style=color:var(--text-faded)>🖼 Image: ' + this.src + '</span>'" />
+        `;
+        
       } else if (c.type === 'thinking') {
-        contentHTML += `<div class="log-thinking">🧠 ${esc(c.text)}</div>`;
+        contentHtml += `<div class="thinking-block">🧠 ${escapeHtml(c.text)}</div>`;
+      }
+    });
+    
+    if (!contentHtml.trim()) return '';
+    
+    // Meta information
+    const metaHtml = [];
+    if (entry.model) metaHtml.push(`<span class="log-model">${entry.model}</span>`);
+    if (entry.cost > 0) metaHtml.push(`<span class="log-cost">$${entry.cost.toFixed(4)}</span>`);
+    if (entry.tokens && (entry.tokens.in || entry.tokens.out)) {
+      metaHtml.push(`<span class="log-tokens">${entry.tokens.in}→${entry.tokens.out} tokens</span>`);
+      if (entry.tokens.cache) {
+        metaHtml.push(`<span class="log-tokens">${entry.tokens.cache} cached</span>`);
       }
     }
     
-    // Skip entries where all content was already rendered
-    if (!contentHTML.trim()) return '';
-    
-    let metaLine = '';
-    if (e.model) metaLine += `<span class="log-model">${e.model}</span> `;
-    if (e.cost > 0) metaLine += `<span class="log-cost">$${e.cost.toFixed(4)}</span> `;
-    if (e.tokens && (e.tokens.in || e.tokens.out)) metaLine += `<span class="log-model">${e.tokens.in}→${e.tokens.out} tok</span>`;
-    
-    return `<div class="log-entry ${roleClass}">
-      <div class="log-ts">${e.ts ? new Date(typeof e.ts === 'number' ? e.ts : e.ts).toLocaleString() : ''}</div>
-      <div class="log-role ${roleLabelClass}">${role}</div>
-      ${contentHTML}
-      ${metaLine ? `<div style="margin-top:4px">${metaLine}</div>` : ''}
-    </div>`;
-  }).join('');
+    return `
+      <div class="log-entry role-${role}">
+        <div class="log-header">
+          <div class="log-role role-${role}">${role.toUpperCase()}</div>
+          <div class="log-timestamp">${formatTimestamp(entry.ts)}</div>
+        </div>
+        ${contentHtml}
+        ${metaHtml.length ? `<div class="log-meta">${metaHtml.join(' ')}</div>` : ''}
+      </div>
+    `;
+  }).filter(html => html).join('');
   
-  // Show loading spinner if last entry indicates work in progress
-  const last = entries[entries.length - 1];
-  if (last) {
-    const lc = last.content || [];
-    const li = lc[lc.length - 1];
-    const recent = last.ts && (Date.now() - new Date(typeof last.ts === 'number' ? last.ts : last.ts).getTime()) < 120000;
-    
-    if (recent && (li?.type === 'tool' || last.stop === 'toolUse')) {
-      log.innerHTML += `<div class="log-spinner"><div class="dots"><span></span><span></span><span></span></div> Running ${li?.name || 'tool'}…</div>`;
-    } else if (recent && li?.type === 'thinking') {
-      log.innerHTML += `<div class="log-spinner"><div class="dots"><span></span><span></span><span></span></div> Thinking…</div>`;
-    } else if (recent && last.role === 'user') {
-      log.innerHTML += `<div class="log-spinner"><div class="dots"><span></span><span></span><span></span></div> Generating response…</div>`;
-    }
+  container.innerHTML = html;
+  
+  // Scroll to bottom
+  setTimeout(() => {
+    container.scrollTop = container.scrollHeight;
+  }, 100);
+}
+
+function closeDetailPanel() {
+  document.getElementById('detailPanel').style.display = 'none';
+  selectedSession = null;
+  document.getElementById('breadcrumb').innerHTML = '';
+}
+
+// Helper functions
+function toggleChildren(index) {
+  const section = document.getElementById(`children-${index}`);
+  if (section) {
+    section.classList.toggle('expanded');
+    const card = section.closest('.session-card');
+    card.classList.toggle('expanded');
   }
 }
 
-// Keyboard shortcut
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+function toggleToolCall(element) {
+  element.classList.toggle('expanded');
+}
 
-setInterval(load, 5000);
-load();
+function togglePin(sessionKey, event) {
+  event.stopPropagation();
+  
+  const session = allSessions.find(s => s.key === sessionKey);
+  if (!session) return;
+  
+  const action = session.pinned ? 'unpin' : 'pin';
+  
+  fetch('/api/pin', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({sessionKey, action})
+  }).then(response => {
+    if (response.ok) {
+      session.pinned = !session.pinned;
+      applyFiltersAndSort();
+      showToast('success', 'Pinned', `Session ${action}ned successfully`);
+    }
+  }).catch(error => {
+    showToast('error', 'Error', 'Failed to update pin status');
+  });
+}
+
+function jumpToLatest() {
+  const container = document.getElementById('logContainer');
+  container.scrollTop = container.scrollHeight;
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('success', 'Copied', 'Text copied to clipboard');
+  }).catch(() => {
+    showToast('error', 'Error', 'Failed to copy text');
+  });
+}
+
+function copyTranscript() {
+  if (!selectedSession) return;
+  
+  // Get all log text content
+  const logElements = document.querySelectorAll('#logContainer .log-text, #logContainer .tool-result');
+  const text = Array.from(logElements).map(el => el.textContent).join('\n\n');
+  
+  copyText(text);
+}
+
+// Toast notifications
+function showToast(type, title, message) {
+  if (!settings.toast) return;
+  
+  const container = document.getElementById('toastContainer');
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  
+  const icons = {success: '✅', error: '❌', info: 'ℹ️'};
+  
+  toast.innerHTML = `
+    <div class="toast-icon">${icons[type] || 'ℹ️'}</div>
+    <div class="toast-content">
+      <div class="toast-title">${title}</div>
+      <div class="toast-message">${message}</div>
+    </div>
+    <button class="toast-close" onclick="this.parentElement.remove()">×</button>
+  `;
+  
+  container.appendChild(toast);
+  
+  // Animate in
+  setTimeout(() => toast.classList.add('show'), 100);
+  
+  // Auto remove after 5 seconds
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 5000);
+  
+  // Play sound if enabled
+  if (settings.sound && type === 'error') {
+    try {
+      document.getElementById('alertSound').play();
+    } catch (e) {}
+  }
+}
+
+// Keyboard shortcuts
+function setupKeyboardShortcuts() {
+  document.addEventListener('keydown', (e) => {
+    // Ignore shortcuts when typing in input fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+      if (e.key === 'Escape') {
+        e.target.blur();
+      }
+      return;
+    }
+    
+    switch (e.key) {
+      case '/':
+        e.preventDefault();
+        document.getElementById('searchInput').focus();
+        break;
+        
+      case 'Escape':
+        closeDetailPanel();
+        break;
+        
+      case 'r':
+        refreshData();
+        break;
+        
+      case 't':
+        toggleTheme();
+        break;
+        
+      case 'j':
+        navigateKeyboard(1);
+        break;
+        
+      case 'k':
+        navigateKeyboard(-1);
+        break;
+        
+      case 'Enter':
+        if (keyboardFocusIndex >= 0 && keyboardFocusIndex < filteredSessions.length) {
+          openSession(filteredSessions[keyboardFocusIndex].key);
+        }
+        break;
+        
+      case '?':
+        showKeyboardHelp();
+        break;
+    }
+  });
+}
+
+function navigateKeyboard(direction) {
+  const cards = document.querySelectorAll('.session-card');
+  
+  // Remove previous focus
+  cards.forEach(card => card.classList.remove('keyboard-focus'));
+  
+  keyboardFocusIndex += direction;
+  
+  if (keyboardFocusIndex < 0) keyboardFocusIndex = filteredSessions.length - 1;
+  if (keyboardFocusIndex >= filteredSessions.length) keyboardFocusIndex = 0;
+  
+  if (keyboardFocusIndex >= 0 && keyboardFocusIndex < cards.length) {
+    const focusCard = cards[keyboardFocusIndex];
+    focusCard.classList.add('keyboard-focus');
+    focusCard.scrollIntoView({behavior: 'smooth', block: 'center'});
+  }
+}
+
+function showKeyboardHelp() {
+  showToast('info', 'Keyboard Shortcuts', 
+    'j/k: Navigate • Enter: Open • /: Search • r: Refresh • t: Theme • Esc: Close');
+}
+
+// Utility functions
+function getSessionName(session) {
+  if (session.label) return session.label;
+  if (session.subject) {
+    const topicMatch = session.key.match(/topic:(\d+)/);
+    const topic = topicMatch?.[1];
+    return session.subject + (topic && topic !== '1' ? ` #${topic}` : '');
+  }
+  if (session.displayName) return session.displayName.replace('telegram:', '');
+  if (session.key.includes(':main:main')) return '💬 Main DM';
+  
+  const cronMatch = session.key.match(/cron:(.{8})/);
+  if (cronMatch) return `Cron ${cronMatch[1]}...`;
+  
+  return session.key.split(':').slice(-2).join(':');
+}
+
+function formatBadgeLabel(type) {
+  const labels = {
+    'main': 'main',
+    'group': 'group', 
+    'telegram': 'telegram',
+    'cron': 'cron',
+    'cron-run': 'run',
+    'subagent': 'sub-agent',
+    'other': 'other'
+  };
+  return labels[type] || type;
+}
+
+function formatTime(timestamp) {
+  if (!timestamp) return '—';
+  const ts = typeof timestamp === 'string' ? new Date(timestamp).getTime() : timestamp;
+  const diff = Date.now() - ts;
+  
+  if (diff < 0) return 'now';
+  
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) return seconds + 's';
+  
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return minutes + 'm';
+  
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours + 'h';
+  
+  return Math.floor(hours / 24) + 'd';
+}
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) return '';
+  const date = new Date(typeof timestamp === 'number' ? timestamp : timestamp);
+  return date.toLocaleString();
+}
+
+function getTotalCost(session) {
+  const activity = session.activity || [];
+  return activity.reduce((total, act) => total + (act.cost || 0), 0);
+}
+
+function getTotalTokens(session) {
+  return getTokensIn(session) + getTokensOut(session);
+}
+
+function getTokensIn(session) {
+  const activity = session.activity || [];
+  return activity.reduce((total, act) => total + (act.tokens?.in || 0), 0);
+}
+
+function getTokensOut(session) {
+  const activity = session.activity || [];
+  return activity.reduce((total, act) => total + (act.tokens?.out || 0), 0);
+}
+
+function getLastModel(session) {
+  const activity = session.activity || [];
+  for (let i = activity.length - 1; i >= 0; i--) {
+    if (activity[i].model) return activity[i].model;
+  }
+  return null;
+}
+
+function getChildrenIcon(session) {
+  const children = session.children || [];
+  const hasSubagents = children.some(c => c.key && c.key.includes(':subagent:'));
+  const hasCronRuns = children.some(c => c.key && c.key.includes(':run:'));
+  
+  if (hasSubagents && hasCronRuns) return '🔀';
+  if (hasSubagents) return '🤖';
+  return '🔁';
+}
+
+function getChildrenLabel(session) {
+  const children = session.children || [];
+  const hasSubagents = children.some(c => c.key && c.key.includes(':subagent:'));
+  const hasCronRuns = children.some(c => c.key && c.key.includes(':run:'));
+  
+  if (hasSubagents && hasCronRuns) return 'children';
+  if (hasSubagents) return session.childCount > 1 ? 'sub-agents' : 'sub-agent';
+  return session.childCount > 1 ? 'runs' : 'run';
+}
+
+function getChildName(child) {
+  if (child.label) return child.label;
+  if (child.sessionId) return child.sessionId.slice(0, 8);
+  return child.key ? child.key.split(':').pop() : '—';
+}
+
+function getChildStatus(child) {
+  const age = Date.now() - (child.updatedAt || 0);
+  if (age < 300000) return 'running';  // 5 min
+  if (age < 3600000) return 'idle';    // 1 hour
+  return 'completed';
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
 </script>
+
 </body>
 </html>
