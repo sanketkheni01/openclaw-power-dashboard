@@ -122,10 +122,54 @@ def get_sessions_with_activity():
         sessions = []
         now = time.time() * 1000
         
+        # Build parent-child map from key structure
+        # Cron runs: "agent:main:cron:<id>:run:<runId>" → parent "agent:main:cron:<id>"
+        children_map = {}  # parent_key → [child_keys]
+        parent_map = {}    # child_key → parent_key
+        
+        for key in raw:
+            if ':run:' in key:
+                parent_key = key.rsplit(':run:', 1)[0]
+                if parent_key in raw:
+                    parent_map[key] = parent_key
+                    children_map.setdefault(parent_key, []).append(key)
+        
         for key, s in raw.items():
             session = {'key': key, **s}
             sid = s.get('sessionId', '')
             updated = s.get('updatedAt', 0)
+            
+            # Add parent/children references
+            if key in parent_map:
+                session['parentKey'] = parent_map[key]
+                parent = raw.get(parent_map[key], {})
+                session['parentLabel'] = parent.get('label', '') or parent.get('displayName', '') or parent_map[key]
+            if key in children_map:
+                child_list = children_map[key]
+                # Sort by updatedAt desc, include basic info
+                child_info = []
+                for ck in sorted(child_list, key=lambda c: raw.get(c, {}).get('updatedAt', 0), reverse=True):
+                    cv = raw[ck]
+                    child_info.append({
+                        'key': ck,
+                        'sessionId': cv.get('sessionId', ''),
+                        'updatedAt': cv.get('updatedAt', 0),
+                        'label': cv.get('label', ''),
+                    })
+                session['children'] = child_info
+                session['childCount'] = len(child_info)
+            
+            # Classify session type
+            if key == 'agent:main:main':
+                session['sessionType'] = 'main'
+            elif ':cron:' in key and ':run:' in key:
+                session['sessionType'] = 'cron-run'
+            elif ':cron:' in key:
+                session['sessionType'] = 'cron'
+            elif ':telegram:' in key:
+                session['sessionType'] = 'telegram'
+            else:
+                session['sessionType'] = 'other'
             
             # Only get activity for sessions active in last 2 hours
             if now - updated < 7200000 and sid:
