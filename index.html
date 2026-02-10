@@ -84,6 +84,18 @@
   .log-spinner .dots span:nth-child(2) { animation-delay: 0.16s; }
   .log-spinner .dots span:nth-child(3) { animation-delay: 0.32s; }
   @keyframes bounce { 0%,80%,100% { transform: scale(0); opacity: 0.3; } 40% { transform: scale(1); opacity: 1; } }
+  .parent-link { font-size: 9px; color: #7c6ff7; cursor: pointer; margin-top: 4px; }
+  .parent-link:hover { text-decoration: underline; color: #9d93ff; }
+  .children-section { margin-top: 8px; border-top: 1px solid #1a1a2e; padding-top: 8px; }
+  .children-label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .child-item { font-size: 10px; padding: 3px 6px; margin: 2px 0; background: #0a0a12; border-radius: 4px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+  .child-item:hover { background: #1a1a2e; }
+  .child-name { color: #888; }
+  .child-time { color: #333; font-size: 9px; }
+  .child-count { font-size: 9px; background: #2a2a14; color: #f5c55b; padding: 1px 5px; border-radius: 3px; margin-left: 6px; }
+  .panel-children { border-bottom: 1px solid #1a1a2e; padding: 10px 20px; }
+  .panel-child-card { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; margin: 3px 0; background: #12121c; border: 1px solid #1e1e30; border-radius: 5px; cursor: pointer; font-size: 10px; }
+  .panel-child-card:hover { border-color: #3a3a5e; }
   @media (max-width: 600px) { .grid { grid-template-columns: 1fr; padding: 10px; } .panel { width: 100vw; } }
 </style>
 </head>
@@ -101,6 +113,7 @@
   <div class="stat"><div class="stat-value" id="sR">-</div><div class="stat-label">1h</div></div>
   <div class="stat"><div class="stat-value" id="sG">-</div><div class="stat-label">Groups</div></div>
   <div class="stat"><div class="stat-value" id="sC">-</div><div class="stat-label">Crons</div></div>
+  <div class="stat"><div class="stat-value" id="sCR">-</div><div class="stat-label">Runs</div></div>
   <div class="stat"><div class="stat-value" id="sD">-</div><div class="stat-label">Direct</div></div>
   <div style="margin-left:auto;display:flex;align-items:center;gap:6px" id="authKeys"></div>
 </div>
@@ -110,6 +123,7 @@
   <button class="fbtn" onclick="filt('recent',this)">🟡 Recent</button>
   <button class="fbtn" onclick="filt('group',this)">💬 Groups</button>
   <button class="fbtn" onclick="filt('cron',this)">⏰ Crons</button>
+  <button class="fbtn" onclick="filt('cron-run',this)">🔁 Runs</button>
   <button class="fbtn" onclick="filt('direct',this)">👤 Direct</button>
   <button class="fbtn" onclick="filt('busy',this)">⚡ Busy</button>
 </div>
@@ -143,9 +157,12 @@ function ago(ts) {
   return (h/24|0)+'d';
 }
 
-function typ(k) {
+function typ(k, s) {
+  if (s && s.sessionType) return s.sessionType;
+  if (k.includes(':cron:') && k.includes(':run:')) return 'cron-run';
   if (k.includes(':cron:')) return 'cron';
   if (k.includes(':topic:') || k.includes('group:')) return 'group';
+  if (k === 'agent:main:main') return 'main';
   return 'direct';
 }
 
@@ -170,7 +187,9 @@ function name(k, s) {
 }
 
 function badge(t) {
-  return `<span class="badge ${t==='group'?'bg':t==='cron'?'bc':'bd'}">${t}</span>`;
+  const cls = t==='group'?'bg':t==='cron'?'bc':t==='cron-run'?'bc':t==='main'?'bd':'bd';
+  const label = t==='cron-run'?'run':t;
+  return `<span class="badge ${cls}">${label}</span>`;
 }
 
 function actHTML(acts) {
@@ -200,28 +219,52 @@ function draw() {
   let list = ALL;
   if (F==='active') list=ALL.filter(s=>now-s.updatedAt<300000);
   else if (F==='recent') list=ALL.filter(s=>now-s.updatedAt<3600000);
-  else if (F==='group') list=ALL.filter(s=>typ(s.key)==='group');
-  else if (F==='cron') list=ALL.filter(s=>typ(s.key)==='cron');
-  else if (F==='direct') list=ALL.filter(s=>typ(s.key)==='direct'&&!s.key.includes(':cron:'));
+  else if (F==='group') list=ALL.filter(s=>typ(s.key,s)==='group');
+  else if (F==='cron') list=ALL.filter(s=>typ(s.key,s)==='cron');
+  else if (F==='cron-run') list=ALL.filter(s=>typ(s.key,s)==='cron-run');
+  else if (F==='direct') list=ALL.filter(s=>['direct','main'].includes(typ(s.key,s)));
   else if (F==='busy') list=ALL.filter(s=>s.activity&&s.activity.length);
 
   const g = document.getElementById('grid');
   if (!list.length) { g.innerHTML='<div class="empty">No sessions</div>'; return; }
   
   g.innerHTML = list.map(s => {
-    const t = typ(s.key);
+    const t = typ(s.key, s);
     const isActive = Date.now() - s.updatedAt < 300000;
     const idx = ALL.indexOf(s);
+    
+    // Parent link for cron runs
+    let parentHTML = '';
+    if (s.parentKey && s.parentLabel) {
+      parentHTML = `<div class="parent-link" onclick="event.stopPropagation();openSessionByKey('${esc(s.parentKey)}')">↑ ${esc(s.parentLabel)}</div>`;
+    }
+    
+    // Children summary for parent crons
+    let childrenHTML = '';
+    if (s.childCount > 0) {
+      const recentChildren = (s.children || []).slice(0, 3);
+      childrenHTML = `<div class="children-section">
+        <div class="children-label">🔁 ${s.childCount} run${s.childCount>1?'s':''}</div>
+        ${recentChildren.map(c => `<div class="child-item" onclick="event.stopPropagation();openSessionByKey('${esc(c.key)}')">
+          <span class="child-name"><span class="dot ${dot(c.updatedAt)}"></span>${ago(c.updatedAt)} ago</span>
+          <span class="child-time">${c.sessionId ? c.sessionId.slice(0,8) : '—'}</span>
+        </div>`).join('')}
+        ${s.childCount > 3 ? `<div style="font-size:9px;color:#444;padding:2px 6px">+${s.childCount-3} more</div>` : ''}
+      </div>`;
+    }
+    
     return `<div class="card${isActive?' is-active':''}" onclick="openSession('${esc(s.key)}',ALL[${idx}])" style="cursor:pointer">
       <div class="card-top">
-        <div class="card-name"><span class="dot ${dot(s.updatedAt)}"></span>${name(s.key,s)}</div>
+        <div class="card-name"><span class="dot ${dot(s.updatedAt)}"></span>${name(s.key,s)}${s.childCount?'<span class="child-count">'+s.childCount+' runs</span>':''}</div>
         ${badge(t)}
       </div>
       <div class="meta">
         <span>📡 ${s.channel||'—'}</span>
         <span>⏱ ${ago(s.updatedAt)} ago</span>
       </div>
+      ${parentHTML}
       ${actHTML(s.activity)}
+      ${childrenHTML}
     </div>`;
   }).join('');
 }
@@ -235,15 +278,17 @@ async function load() {
     const now = Date.now();
     const a=ALL.filter(s=>now-s.updatedAt<300000).length;
     const re=ALL.filter(s=>now-s.updatedAt<3600000).length;
-    const gr=ALL.filter(s=>typ(s.key)==='group').length;
-    const cr=ALL.filter(s=>typ(s.key)==='cron').length;
-    const di=ALL.filter(s=>typ(s.key)==='direct'&&!s.key.includes(':cron:')).length;
+    const gr=ALL.filter(s=>typ(s.key,s)==='group').length;
+    const cr=ALL.filter(s=>typ(s.key,s)==='cron').length;
+    const crr=ALL.filter(s=>typ(s.key,s)==='cron-run').length;
+    const di=ALL.filter(s=>['direct','main'].includes(typ(s.key,s))).length;
     
     document.getElementById('sT').textContent=ALL.length;
     document.getElementById('sA').textContent=a;
     document.getElementById('sR').textContent=re;
     document.getElementById('sG').textContent=gr;
     document.getElementById('sC').textContent=cr;
+    document.getElementById('sCR').textContent=crr;
     document.getElementById('sD').textContent=di;
     document.getElementById('lastUp').textContent=new Date().toLocaleTimeString();
     
@@ -264,6 +309,11 @@ async function load() {
   } catch(e) { console.error(e); }
 }
 
+function openSessionByKey(key) {
+  const s = ALL.find(x => x.key === key);
+  if (s) openSession(key, s);
+}
+
 // Detail panel
 let panelSid = null;
 let panelInterval = null;
@@ -277,15 +327,34 @@ async function openSession(key, s) {
   panelEntryCount = 0;
   document.getElementById('panelOverlay').classList.add('open');
   document.getElementById('panelTitle').textContent = name(key, s);
-  document.getElementById('panelMeta').innerHTML = `
+  const sType = typ(key, s);
+  let metaHTML = `
     <span>📡 ${s.channel||'—'}</span>
     <span>🆔 ${sid.slice(0,8)}</span>
     <span>⏱ ${ago(s.updatedAt)} ago</span>
-    <span>${typ(key).toUpperCase()}</span>
+    <span>${sType.toUpperCase()}</span>
     <span class="live-dot" style="margin-left:4px"></span>
     <span style="color:#4ade80;font-size:9px">LIVE</span>
   `;
-  document.getElementById('panelLog').innerHTML = '<div class="log-loading">Loading transcript...</div>';
+  if (s.parentKey && s.parentLabel) {
+    metaHTML += `<span class="parent-link" onclick="openSessionByKey('${esc(s.parentKey)}')">↑ Parent: ${esc(s.parentLabel)}</span>`;
+  }
+  document.getElementById('panelMeta').innerHTML = metaHTML;
+  
+  // Show children list in panel if this is a parent
+  let childrenPanel = '';
+  if (s.children && s.children.length) {
+    childrenPanel = `<div class="panel-children">
+      <div class="children-label">🔁 ${s.children.length} run${s.children.length>1?'s':''}</div>
+      ${s.children.slice(0, 10).map(c => `<div class="panel-child-card" onclick="openSessionByKey('${esc(c.key)}')">
+        <span><span class="dot ${dot(c.updatedAt)}"></span> ${c.label || c.sessionId?.slice(0,8) || '—'}</span>
+        <span style="color:#555">${ago(c.updatedAt)} ago</span>
+      </div>`).join('')}
+      ${s.children.length > 10 ? `<div style="font-size:9px;color:#444;padding:4px">+${s.children.length-10} more runs</div>` : ''}
+    </div>`;
+  }
+  
+  document.getElementById('panelLog').innerHTML = childrenPanel + '<div class="log-loading">Loading transcript...</div>';
   
   await loadTranscript(sid);
   
