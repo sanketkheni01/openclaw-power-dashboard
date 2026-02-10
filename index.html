@@ -570,6 +570,8 @@ body{
   </h1>
   <div class="controls">
     <button class="btn" id="settingsBtn" onclick="toggleSettings()">Settings</button>
+    <a href="/system.html" class="btn" style="text-decoration:none">System</a>
+    <button class="btn" onclick="restartGateway()" style="color:rgba(239,68,68,.7)">Restart Gateway</button>
     <button class="btn" onclick="refreshData()">Refresh</button>
   </div>
 </div>
@@ -777,6 +779,19 @@ function initWebSocket() {
   } catch (e) {
     console.warn('WebSocket not available');
   }
+}
+
+async function restartGateway() {
+  if (!confirm('Restart the OpenClaw gateway?')) return;
+  try {
+    const r = await fetch('/api/restart-gateway', {method: 'POST'});
+    const d = await r.json();
+    if (d.status === 'restarting') {
+      showToast('info', 'Gateway', 'Restarting OpenClaw gateway...');
+    } else {
+      showToast('error', 'Error', d.error || 'Failed');
+    }
+  } catch(e) { showToast('error', 'Error', e.message); }
 }
 
 async function refreshData() {

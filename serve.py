@@ -11,6 +11,141 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FILE = '/root/.openclaw/agents/main/sessions/sessions.json'
 TOPIC_NAMES_FILE = os.path.join(DIR, 'topic-names.json')
 
+def get_system_info():
+    info = {}
+    try:
+        # CPU
+        cpu_count = os.cpu_count() or 1
+        load1, load5, load15 = os.getloadavg()
+        cpu_usage = min(100, round(load1 / cpu_count * 100, 1))
+        cpu_model = ''
+        try:
+            with open('/proc/cpuinfo') as f:
+                for line in f:
+                    if 'model name' in line:
+                        cpu_model = line.split(':')[1].strip()
+                        break
+        except: pass
+        info['cpu'] = {
+            'usage_pct': cpu_usage,
+            'load_avg': f'{load1:.2f} / {load5:.2f} / {load15:.2f}',
+            'cores': cpu_count,
+            'model': cpu_model
+        }
+        
+        # Memory
+        try:
+            with open('/proc/meminfo') as f:
+                meminfo = {}
+                for line in f:
+                    parts = line.split(':')
+                    if len(parts) == 2:
+                        key = parts[0].strip()
+                        val = int(parts[1].strip().split()[0])  # kB
+                        meminfo[key] = val
+            total = meminfo.get('MemTotal', 0)
+            avail = meminfo.get('MemAvailable', 0)
+            used = total - avail
+            swap_total = meminfo.get('SwapTotal', 0)
+            swap_free = meminfo.get('SwapFree', 0)
+            swap_used = swap_total - swap_free
+            def fmt_kb(kb):
+                if kb > 1048576: return f'{kb/1048576:.1f}G'
+                if kb > 1024: return f'{kb/1024:.0f}M'
+                return f'{kb}K'
+            info['memory'] = {
+                'total': fmt_kb(total), 'used': fmt_kb(used), 'available': fmt_kb(avail),
+                'used_pct': round(used/total*100, 1) if total else 0,
+                'swap_total': fmt_kb(swap_total), 'swap_used': fmt_kb(swap_used),
+                'swap_pct': round(swap_used/swap_total*100, 1) if swap_total else 0
+            }
+        except: info['memory'] = {}
+        
+        # Disk
+        try:
+            df = subprocess.check_output(['df', '-h', '--output=source,fstype,size,used,avail,pcent,target'], text=True)
+            disks = []
+            for line in df.strip().split('\n')[1:]:
+                parts = line.split()
+                if len(parts) >= 7 and parts[0].startswith('/'):
+                    pct = int(parts[5].replace('%',''))
+                    disks.append({'fs': parts[0], 'type': parts[1], 'size': parts[2], 'used': parts[3], 'avail': parts[4], 'used_pct': pct, 'mount': parts[6]})
+            info['disks'] = disks
+        except: info['disks'] = []
+        
+        # Network
+        try:
+            with open('/proc/net/dev') as f:
+                lines = f.readlines()[2:]
+            rx_total = tx_total = 0
+            for line in lines:
+                parts = line.split()
+                if parts[0].rstrip(':') in ('lo',): continue
+                rx_total += int(parts[1])
+                tx_total += int(parts[9])
+            def fmt_bytes(b):
+                if b > 1073741824: return f'{b/1073741824:.1f}G'
+                if b > 1048576: return f'{b/1048576:.1f}M'
+                if b > 1024: return f'{b/1024:.0f}K'
+                return f'{b}B'
+            conns = subprocess.check_output(['ss', '-tun'], text=True).count('\n') - 1
+            info['network'] = {'rx': fmt_bytes(rx_total), 'tx': fmt_bytes(tx_total), 'connections': str(conns)}
+        except: info['network'] = {}
+        
+        # System
+        try:
+            hostname = os.uname().nodename
+            kernel = os.uname().release
+            uptime_s = float(open('/proc/uptime').read().split()[0])
+            days = int(uptime_s // 86400)
+            hours = int((uptime_s % 86400) // 3600)
+            mins = int((uptime_s % 3600) // 60)
+            uptime = f'{days}d {hours}h {mins}m' if days else f'{hours}h {mins}m'
+            proc_count = len([d for d in os.listdir('/proc') if d.isdigit()])
+            info['system'] = {'hostname': hostname, 'kernel': kernel, 'uptime': uptime, 'processes': str(proc_count)}
+        except: info['system'] = {}
+        
+        # Services
+        svcs = []
+        # Check OpenClaw gateway process
+        try:
+            result = subprocess.run(['pgrep', '-f', 'openclaw-gateway'], capture_output=True, text=True, timeout=3)
+            active = result.returncode == 0
+            svcs.append({'name': 'openclaw-gateway', 'status': 'active' if active else 'inactive', 'active': active})
+        except:
+            svcs.append({'name': 'openclaw-gateway', 'status': 'unknown', 'active': False})
+        # Systemd services
+        for svc in ['cozy-dashboard']:
+            try:
+                result = subprocess.run(['systemctl', 'is-active', svc], capture_output=True, text=True, timeout=3)
+                status = result.stdout.strip()
+                svcs.append({'name': svc, 'status': status, 'active': status == 'active'})
+            except:
+                svcs.append({'name': svc, 'status': 'unknown', 'active': False})
+        # Check tailscale
+        try:
+            result = subprocess.run(['tailscale', 'status', '--json'], capture_output=True, text=True, timeout=3)
+            active = result.returncode == 0
+            svcs.append({'name': 'tailscale', 'status': 'active' if active else 'inactive', 'active': active})
+        except:
+            svcs.append({'name': 'tailscale', 'status': 'unknown', 'active': False})
+        info['services'] = svcs
+        
+        # Top processes
+        try:
+            ps = subprocess.check_output(['ps', 'aux', '--sort=-pcpu'], text=True, timeout=5)
+            procs = []
+            for line in ps.strip().split('\n')[1:11]:
+                parts = line.split(None, 10)
+                if len(parts) >= 11:
+                    procs.append({'user': parts[0], 'pid': parts[1], 'cpu': parts[2], 'mem': parts[3], 'rss': parts[5], 'cmd': parts[10][:80]})
+            info['processes'] = procs
+        except: info['processes'] = []
+        
+    except Exception as e:
+        info['error'] = str(e)
+    return info
+
 def load_topic_names():
     try:
         with open(TOPIC_NAMES_FILE) as f:
@@ -319,9 +454,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 return
+        if self.path == '/api/restart-gateway':
+            try:
+                subprocess.Popen(['systemctl', 'restart', 'openclaw'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"status":"restarting"}')
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                return
+        
         super().do_POST()
     
     def do_GET(self):
+        if self.path.startswith('/data/system.json'):
+            data = get_system_info()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+            return
+        
         if self.path.startswith('/data/transcript/'):
             sid = self.path.split('/data/transcript/')[1].split('?')[0]
             import glob
