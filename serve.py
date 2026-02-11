@@ -52,13 +52,25 @@ def _oauth_save_creds(creds):
     os.chmod(OAUTH_CREDS_FILE, 0o600)
 
 def _oauth_token_request(payload):
-    """Make a POST to the OAuth token endpoint."""
+    """Make a POST to the OAuth token endpoint with browser-like headers."""
     data = json.dumps(payload).encode()
     req = urllib.request.Request(OAUTH_TOKEN_URL, data=data, headers={
         'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Origin': 'https://claude.ai',
+        'Referer': 'https://claude.ai/',
     })
-    resp = urllib.request.urlopen(req, timeout=15)
-    return json.loads(resp.read())
+    try:
+        resp = urllib.request.urlopen(req, timeout=15)
+        return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = ''
+        try:
+            body = e.read().decode()
+        except:
+            pass
+        raise ValueError(f'Token exchange failed (HTTP {e.code}): {body}')
 
 def _oauth_refresh_if_needed(account):
     """Refresh token if expiring within 5 minutes. Returns updated account or None on failure."""
@@ -735,13 +747,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     pkce = _pkce_sessions.pop(session_id, None)
                 if not pkce:
                     raise ValueError('Invalid or expired session. Please start over.')
-                # Parse code#state format
                 if '#' in raw_code:
                     code, state = raw_code.split('#', 1)
                 else:
                     code = raw_code
                     state = pkce['verifier']
-                # Exchange code for tokens
                 result = _oauth_token_request({
                     'grant_type': 'authorization_code',
                     'client_id': OAUTH_CLIENT_ID,
@@ -753,26 +763,43 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 access_token = result['access_token']
                 refresh_token = result['refresh_token']
                 expires_in = result.get('expires_in', 3600)
-                # Try to get user profile from usage endpoint to identify account
-                email = result.get('email', '') or result.get('user', {}).get('email', '')
-                subscription = result.get('subscription', '') or result.get('user', {}).get('subscription_type', '')
-                # If no email in token response, use a placeholder
-                if not email:
-                    email = f"claude-user-{secrets.token_hex(4)}"
-                # Save credentials
+                email = f"claude-account-{secrets.token_hex(4)}"
                 creds = _oauth_load_creds()
                 creds['accounts'][email] = {
                     'accessToken': access_token,
                     'refreshToken': refresh_token,
                     'expiresAt': time.time() + expires_in,
                     'email': email,
-                    'subscriptionType': subscription,
                 }
                 _oauth_save_creds(creds)
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(json.dumps({'ok': True, 'email': email, 'subscription': subscription}).encode())
+                self.wfile.write(json.dumps({'ok': True, 'email': email}).encode())
+            except Exception as e:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
+        if self.path == '/api/keys/oauth/update':
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            account_id = body.get('accountId', '')
+            label = body.get('label', '')
+            linked_key = body.get('linkedKey', '')
+            try:
+                creds = _oauth_load_creds()
+                if account_id not in creds['accounts']:
+                    raise ValueError('Account not found')
+                creds['accounts'][account_id]['label'] = label
+                creds['accounts'][account_id]['linkedKey'] = linked_key
+                _oauth_save_creds(creds)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'ok': True}).encode())
             except Exception as e:
                 self.send_response(400)
                 self.send_header('Content-Type', 'application/json')
@@ -903,7 +930,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     accounts[email] = refreshed
                     try:
                         usage = _oauth_get_usage(refreshed['accessToken'])
-                        result[email] = {'ok': True, 'usage': usage, 'email': email, 'subscriptionType': refreshed.get('subscriptionType', '')}
+                        result[email] = {'ok': True, 'usage': usage, 'email': email, 'subscriptionType': refreshed.get('subscriptionType', ''), 'label': refreshed.get('label', ''), 'linkedKey': refreshed.get('linkedKey', '')}
                     except urllib.error.HTTPError as e:
                         try:
                             body = json.loads(e.read())

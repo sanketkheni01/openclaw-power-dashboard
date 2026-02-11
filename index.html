@@ -1756,6 +1756,7 @@ async function loadKeysData() {
     const r = await fetch('/api/keys?t=' + Date.now());
     const d = await r.json();
     keysData = d.keys || [];
+    window._allKeyProfiles = keysData.map(k => k.name);
   } catch(e) { showToast('error', 'Error', e.message); }
 }
 
@@ -1937,7 +1938,7 @@ async function startOAuthLogin() {
     const r = await fetch('/api/keys/oauth/start', {method:'POST'});
     const d = await r.json();
     if (d.error) { showToast('error','OAuth Error', d.error); return; }
-    oauthPending = d;
+    oauthPending = {...d, step: 'code'};
     window.open(d.authUrl, '_blank');
     renderKeysModal();
   } catch(e) { showToast('error','Error',e.message); }
@@ -1954,8 +1955,30 @@ async function completeOAuthLogin() {
     });
     const d = await r.json();
     if (d.error) { showToast('error','OAuth Error', d.error); return; }
+    // Move to label step
+    oauthPending = {step: 'label', accountId: d.email, suggestedLabel: ''};
+    // Store all key profile names for linking dropdown
+    window._allKeyProfiles = Object.keys(window._lastAuthData?.profiles || {});
+    await loadOAuthUsage();
+    renderKeysModal();
+  } catch(e) { showToast('error','Error',e.message); }
+}
+
+async function saveOAuthLabel() {
+  const labelInput = document.getElementById('oauthLabelInput');
+  const linkSelect = document.getElementById('oauthLinkKey');
+  if (!labelInput || !oauthPending) return;
+  const label = labelInput.value.trim() || oauthPending.accountId;
+  const linkedKey = linkSelect ? linkSelect.value : '';
+  try {
+    const r = await fetch('/api/keys/oauth/update', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({accountId: oauthPending.accountId, label, linkedKey})
+    });
+    const d = await r.json();
+    if (d.error) { showToast('error','Error', d.error); return; }
     oauthPending = null;
-    showToast('success','Connected', `✅ ${d.email}`);
+    showToast('success','Saved', `✅ ${label}`);
     await loadOAuthUsage();
     renderKeysModal();
   } catch(e) { showToast('error','Error',e.message); }
@@ -1997,9 +2020,11 @@ function renderOAuthSection() {
 
   // Render each connected account's usage
   accounts.forEach(([email, data]) => {
+    const label = data.label || email;
+    const linkedKey = data.linkedKey || '';
     html += `<div class="oauth-account">
       <div class="oauth-account-header">
-        <div class="oauth-account-email">✅ ${escapeHtml(email)}${data.subscriptionType ? ` <span style="font-size:10px;color:var(--text-dim)">(${escapeHtml(data.subscriptionType)})</span>` : ''}</div>
+        <div class="oauth-account-email">✅ ${escapeHtml(label)}${linkedKey ? ` <span style="font-size:10px;padding:1px 5px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:3px;color:var(--text-muted)">🔗 ${escapeHtml(linkedKey.split(':').pop())}</span>` : ''}${data.subscriptionType ? ` <span style="font-size:10px;color:var(--text-dim)">(${escapeHtml(data.subscriptionType)})</span>` : ''}</div>
         <div class="oauth-account-actions">
           <button class="oauth-remove-btn" onclick="removeOAuthAccount('${escapeHtml(email)}')">Remove</button>
         </div>
@@ -2051,7 +2076,7 @@ function renderOAuthSection() {
   });
 
   // Login button
-  if (oauthPending) {
+  if (oauthPending && oauthPending.step === 'code') {
     html += `<div style="margin-top:8px">
       <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Paste the authorization code from the browser:</div>
       <div class="oauth-code-input">
@@ -2059,6 +2084,19 @@ function renderOAuthSection() {
         <button class="btn primary" onclick="completeOAuthLogin()">Connect</button>
         <button class="btn" onclick="oauthPending=null;renderKeysModal()">Cancel</button>
       </div>
+    </div>`;
+  } else if (oauthPending && oauthPending.step === 'label') {
+    html += `<div style="margin-top:8px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">✅ Connected! Give this account a name (e.g. email or label):</div>
+      <div class="oauth-code-input">
+        <input type="text" id="oauthLabelInput" placeholder="yourdev@gmail.com or 'Tona Max 20x'" value="${escapeHtml(oauthPending.suggestedLabel||'')}" onkeydown="if(event.key==='Enter')saveOAuthLabel()">
+        <button class="btn primary" onclick="saveOAuthLabel()">Save</button>
+      </div>
+      <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Link to API key (optional):</div>
+      <select id="oauthLinkKey" style="width:100%;margin-top:4px;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font-size:12px">
+        <option value="">None</option>
+        ${(window._allKeyProfiles||[]).map(k => `<option value="${escapeHtml(k)}">${escapeHtml(k.split(':').pop())}</option>`).join('')}
+      </select>
     </div>`;
   } else {
     html += `<button class="oauth-login-btn" onclick="startOAuthLogin()" style="margin-top:8px">
