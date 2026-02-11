@@ -633,6 +633,28 @@ body{
   font-family:inherit;transition:color .15s;
 }
 .key-test-btn:hover{color:var(--text-secondary)}
+
+/* ── Key Usage ── */
+.keys-summary{
+  background:var(--bg-surface);border:1px solid var(--border-subtle);
+  border-radius:var(--radius);padding:12px 16px;margin-bottom:14px;
+  display:flex;gap:20px;flex-wrap:wrap;
+}
+.keys-summary-item{display:flex;flex-direction:column;gap:2px}
+.keys-summary-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.keys-summary-value{font-size:15px;font-weight:600;color:var(--text-primary)}
+.key-usage{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:3px}
+.key-usage-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.key-usage-dot.green{background:var(--green)}
+.key-usage-dot.yellow{background:var(--yellow)}
+.key-usage-dot.red{background:var(--red)}
+.key-usage-dot.gray{background:var(--text-dim)}
+.key-usage-stat{font-size:10px;color:var(--text-muted)}
+.key-usage-bar{
+  height:3px;border-radius:2px;background:var(--border-subtle);
+  flex:1;min-width:40px;max-width:80px;overflow:hidden;
+}
+.key-usage-bar-fill{height:100%;border-radius:2px;transition:width .3s}
 </style>
 </head>
 <body>
@@ -1670,9 +1692,10 @@ function escapeHtml(text) {
 // ── API Keys Modal ──
 let keysData = [];
 let keysTestResults = {};
+let keysUsageData = {};
 
 async function openKeysModal() {
-  await loadKeysData();
+  await Promise.all([loadKeysData(), loadKeysUsage()]);
   renderKeysModal();
 }
 
@@ -1682,6 +1705,22 @@ async function loadKeysData() {
     const d = await r.json();
     keysData = d.keys || [];
   } catch(e) { showToast('error', 'Error', e.message); }
+}
+
+async function loadKeysUsage() {
+  try {
+    const r = await fetch('/api/keys/usage?t=' + Date.now());
+    keysUsageData = await r.json();
+  } catch(e) { keysUsageData = {}; }
+}
+
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return Math.floor(diff/1000) + 's ago';
+  if (diff < 3600000) return Math.floor(diff/60000) + 'm ago';
+  if (diff < 86400000) return Math.floor(diff/3600000) + 'h ago';
+  return Math.floor(diff/86400000) + 'd ago';
 }
 
 function renderKeysModal() {
@@ -1705,6 +1744,21 @@ function renderKeysModal() {
     else if (testRes && !testRes.ok) testHtml = `<span class="key-test-result" style="color:var(--red)" title="${escapeHtml(testRes.error||'')}">❌</span>`;
 
     const shortName = key.name.replace(key.provider + ':', '');
+    const usage = (keysUsageData.keys || {})[key.name] || {};
+    const statusColor = usage.status === 'active' ? 'green' : usage.status === 'error' ? 'red' : usage.status === 'idle' ? 'yellow' : 'gray';
+    const lastActive = usage.lastUsed ? timeAgo(usage.lastUsed) : 'never';
+    const errCount = usage.errorCount || 0;
+
+    // Relative usage bar: based on recency (more recent = more filled)
+    const recency = usage.lastUsed ? Math.max(0, 100 - Math.min(100, (Date.now() - usage.lastUsed) / 36000)) : 0; // 1hr = 0%
+
+    let usageHtml = `<div class="key-usage">
+      <span class="key-usage-dot ${statusColor}"></span>
+      <span class="key-usage-stat">${lastActive}</span>
+      <div class="key-usage-bar"><div class="key-usage-bar-fill" style="width:${Math.round(recency)}%;background:var(--${statusColor})"></div></div>
+      ${errCount > 0 ? `<span class="key-usage-stat" style="color:var(--red)">${errCount} err</span>` : ''}
+    </div>`;
+
     return `<div class="key-card ${isEnabled ? '' : 'disabled'}" data-key="${escapeHtml(key.name)}">
       <div class="key-drag" title="Drag to reorder">⠿</div>
       <div class="key-info">
@@ -1713,6 +1767,7 @@ function renderKeysModal() {
           <span>${key.provider}</span>
           <span>${key.mode}</span>
         </div>
+        ${usageHtml}
       </div>
       <span class="key-position ${isEnabled ? '' : 'off'}">${isEnabled ? '#' + (key.position + 1) : 'OFF'}</span>
       ${testHtml}
@@ -1727,12 +1782,20 @@ function renderKeysModal() {
     </div>`;
   };
 
+  const summary = keysUsageData.summary || {};
+  const summaryHtml = `<div class="keys-summary">
+    <div class="keys-summary-item"><span class="keys-summary-label">Active</span><span class="keys-summary-value">${summary.activeKeys||0}/${summary.totalKeys||0}</span></div>
+    <div class="keys-summary-item"><span class="keys-summary-label">Errors</span><span class="keys-summary-value" ${(summary.totalErrors||0)>0?'style="color:var(--red)"':''}>${summary.totalErrors||0}</span></div>
+    <div class="keys-summary-item"><span class="keys-summary-label">Last Rotation</span><span class="keys-summary-value" style="font-size:12px">${summary.lastRotation ? timeAgo(summary.lastRotation) : '—'}</span></div>
+  </div>`;
+
   overlay.innerHTML = `<div class="modal">
     <div class="modal-header">
       <h2>&#9881; API Keys</h2>
       <button class="btn" onclick="document.getElementById('keysModal').remove()">&times;</button>
     </div>
     <div class="modal-body">
+      ${summaryHtml}
       ${enabled.map((k,i) => renderCard(k, i, true)).join('')}
       ${disabled.length ? '<div style="font-size:11px;color:var(--text-dim);margin:12px 0 4px;text-transform:uppercase;letter-spacing:1px">Disabled</div>' : ''}
       ${disabled.map((k,i) => renderCard(k, i, false)).join('')}
