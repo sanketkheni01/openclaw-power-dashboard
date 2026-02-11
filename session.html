@@ -463,16 +463,25 @@ function copyTranscript() {
 
 async function sendMessage() {
   const input = document.getElementById('sendInput');
+  const btn = input.nextElementSibling;
   const msg = input.value.trim();
   if (!msg || !session) return;
-  input.value = '';
+  btn.disabled = true; input.disabled = true;
   try {
-    await fetch('/api/session/send', {
+    const res = await fetch('/api/send-message', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({sessionKey: session.key, message: msg})
+      body: JSON.stringify({sessionId: session.sessionId, message: msg})
     });
-    showToast('success','Sent','Message sent');
+    const data = await res.json();
+    if (res.ok && data.status === 'sent') {
+      input.value = '';
+      showToast('success','Sent','Message sent');
+      setTimeout(() => refreshTranscript(session.sessionId), 1500);
+    } else {
+      showToast('error','Error', data.error || 'Failed to send');
+    }
   } catch(e) { showToast('error','Error',e.message); }
+  btn.disabled = false; input.disabled = false;
 }
 
 async function init() {
