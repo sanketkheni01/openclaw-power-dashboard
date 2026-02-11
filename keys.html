@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API Keys — OpenClaw</title>
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg-base:#09090b;--bg-surface:#0c0c10;--bg-elevated:#141418;
+  --border-subtle:#1e1e24;--border-default:#2a2a32;--border-hover:#3a3a44;
+  --text-primary:#fafafa;--text-secondary:#a1a1aa;--text-muted:#71717a;--text-dim:#3f3f46;
+  --accent:#7c6ff7;--green:#22c55e;--yellow:#eab308;--red:#ef4444;--blue:#3b82f6;
+  --font-mono:'SF Mono',Monaco,'Cascadia Code',monospace;
+  --font-sans:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
+  --radius:8px;
+}
+body{font-family:var(--font-sans);background:var(--bg-base);color:var(--text-primary);min-height:100dvh;line-height:1.5;font-size:13px}
+
+/* Header */
+.header{padding:12px 24px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;background:var(--bg-base);position:sticky;top:0;z-index:50}
+.header h1{font-size:16px;font-weight:600;display:flex;align-items:center;gap:10px}
+.header .brand{color:var(--text-secondary);font-weight:500;font-size:13px}
+.back-link{color:var(--text-muted);text-decoration:none;font-size:12px;padding:4px 12px;border:1px solid var(--border-default);border-radius:var(--radius);transition:color .15s,border-color .15s}
+.back-link:hover{color:var(--text-secondary);border-color:var(--border-hover)}
+.header-right{display:flex;gap:8px;align-items:center}
+.refresh-badge{font-size:10px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+.btn{background:var(--bg-elevated);border:1px solid var(--border-default);color:var(--text-muted);padding:4px 12px;border-radius:var(--radius);cursor:pointer;font-size:12px;transition:border-color .15s,color .15s;font-family:inherit;display:flex;align-items:center;gap:4px}
+.btn:hover{border-color:var(--border-hover);color:var(--text-secondary)}
+.btn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+.btn.primary:hover{opacity:.85}
+.btn.danger{border-color:rgba(239,68,68,.3);color:rgba(239,68,68,.7)}
+.btn.danger:hover{border-color:rgba(239,68,68,.5);color:var(--red)}
+
+/* Layout */
+.container{max-width:1400px;margin:0 auto;padding:20px 24px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
+@media(max-width:900px){.container{grid-template-columns:1fr}}
+
+/* Sections */
+.section{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:12px;padding:20px;display:flex;flex-direction:column;gap:12px}
+.section-title{font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-subtle)}
+.section-title .count{font-size:11px;color:var(--text-dim);font-weight:400}
+
+/* Summary strip */
+.summary{display:flex;gap:20px;flex-wrap:wrap;padding:8px 12px;background:var(--bg-elevated);border-radius:var(--radius);border:1px solid var(--border-subtle)}
+.summary-item{display:flex;flex-direction:column;gap:1px}
+.summary-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px}
+.summary-value{font-size:14px;font-weight:600}
+
+/* Key cards */
+.key-card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;gap:12px;transition:border-color .15s}
+.key-card:hover{border-color:var(--border-default)}
+.key-card.disabled{opacity:.5}
+.key-status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.key-status-dot.green{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.4)}
+.key-status-dot.yellow{background:var(--yellow);box-shadow:0 0 6px rgba(234,179,8,.3)}
+.key-status-dot.red{background:var(--red);box-shadow:0 0 6px rgba(239,68,68,.3)}
+.key-status-dot.gray{background:var(--text-dim)}
+.key-info{flex:1;min-width:0}
+.key-name{font-size:13px;font-weight:500}
+.key-meta{font-size:11px;color:var(--text-dim);display:flex;gap:8px;margin-top:2px;flex-wrap:wrap}
+.key-position{font-size:10px;padding:1px 6px;border-radius:4px;font-weight:600;border:1px solid}
+.key-position.on{background:rgba(124,111,247,.08);color:var(--accent);border-color:rgba(124,111,247,.15)}
+.key-position.off{background:rgba(239,68,68,.06);color:rgba(239,68,68,.5);border-color:rgba(239,68,68,.1)}
+.key-actions{display:flex;gap:4px;align-items:center}
+.key-toggle{width:36px;height:20px;background:var(--bg-surface);border:1px solid var(--border-default);border-radius:10px;cursor:pointer;position:relative;transition:background .15s}
+.key-toggle.on{background:var(--green);border-color:var(--green)}
+.key-toggle .knob{position:absolute;width:16px;height:16px;background:#fff;border-radius:50%;top:1px;left:1px;transition:transform .15s}
+.key-toggle.on .knob{transform:translateX(16px)}
+.key-move-btn{background:none;border:1px solid var(--border-subtle);color:var(--text-dim);width:24px;height:24px;border-radius:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:color .15s,border-color .15s}
+.key-move-btn:hover{color:var(--text-secondary);border-color:var(--border-default)}
+.key-move-btn:disabled{opacity:.3;cursor:default}
+.key-test-btn{background:none;border:1px solid var(--border-subtle);color:var(--text-dim);padding:2px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;transition:color .15s}
+.key-test-btn:hover{color:var(--text-secondary)}
+.key-test-result{font-size:11px;min-width:20px;text-align:center}
+.key-usage-bar{height:3px;border-radius:2px;background:var(--border-subtle);width:80px;overflow:hidden}
+.key-usage-bar-fill{height:100%;border-radius:2px;transition:width .5s}
+
+/* OAuth cards */
+.oauth-card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:var(--radius);padding:14px;transition:border-color .15s}
+.oauth-card:hover{border-color:var(--border-default)}
+.oauth-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.oauth-label{font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
+.oauth-linked{font-size:10px;padding:1px 5px;background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:3px;color:var(--text-muted)}
+.oauth-sub-type{font-size:10px;color:var(--text-dim)}
+.oauth-actions{display:flex;gap:4px}
+.oauth-usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+@media(max-width:500px){.oauth-usage-grid{grid-template-columns:1fr}}
+.usage-item{display:flex;flex-direction:column;gap:3px}
+.usage-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.3px;display:flex;justify-content:space-between}
+.usage-bar{height:6px;background:var(--bg-base);border-radius:3px;overflow:hidden}
+.usage-fill{height:100%;border-radius:3px;transition:width .5s}
+.usage-reset{font-size:10px;color:var(--text-dim)}
+.usage-value{font-size:11px;color:var(--text-secondary);font-weight:500}
+.oauth-extra{font-size:11px;color:var(--text-muted);margin-top:6px;padding:6px 10px;background:var(--bg-base);border-radius:4px}
+.oauth-error{font-size:11px;color:rgba(239,68,68,.7);padding:6px 0}
+.oauth-login-btn{background:linear-gradient(135deg,#7c6ff7,#5b4fd6);color:#fff;border:none;padding:10px 20px;border-radius:var(--radius);cursor:pointer;font-size:13px;font-weight:500;font-family:inherit;transition:opacity .15s;display:flex;align-items:center;gap:6px;width:100%;justify-content:center}
+.oauth-login-btn:hover{opacity:.85}
+.oauth-code-input{display:flex;gap:8px;align-items:center}
+.oauth-code-input input{flex:1;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:var(--radius);padding:6px 10px;color:var(--text-primary);font-size:12px;font-family:var(--font-mono)}
+.oauth-code-input input::placeholder{color:var(--text-dim)}
+.oauth-code-input input:focus{outline:none;border-color:var(--accent)}
+.edit-form{margin:8px 0;padding:10px;background:var(--bg-base);border-radius:var(--radius);display:flex;flex-direction:column;gap:8px}
+.edit-form label{font-size:10px;color:var(--text-dim)}
+.edit-form input,.edit-form select{width:100%;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font-size:12px;margin-top:2px}
+.edit-form input:focus,.edit-form select:focus{outline:none;border-color:var(--accent)}
+.edit-form .btn-row{display:flex;gap:4px}
+
+/* Raw JSON toggle */
+details{margin-top:6px}
+details summary{font-size:10px;color:var(--text-dim);cursor:pointer;user-select:none}
+details pre{font-size:9px;color:var(--text-muted);background:var(--bg-base);padding:6px;border-radius:4px;margin-top:4px;overflow-x:auto;max-height:200px}
+
+/* Toast */
+.toast-container{position:fixed;top:12px;right:12px;z-index:100;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:var(--radius);padding:8px 12px;min-width:260px;max-width:360px;box-shadow:0 4px 16px rgba(0,0,0,.4);display:flex;align-items:center;gap:8px;transform:translateX(120%);opacity:0;transition:transform .2s,opacity .2s}
+.toast.show{transform:translateX(0);opacity:1}
+.toast.success{border-color:rgba(34,197,94,.3)}.toast.error{border-color:rgba(239,68,68,.3)}.toast.info{border-color:rgba(59,130,246,.3)}
+.toast-icon{font-size:14px;flex-shrink:0}
+.toast.success .toast-icon{color:rgba(34,197,94,.7)}.toast.error .toast-icon{color:rgba(239,68,68,.7)}.toast.info .toast-icon{color:rgba(59,130,246,.7)}
+.toast-title{font-weight:600;font-size:12px}.toast-message{font-size:11px;color:var(--text-muted)}
+.toast-close{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;padding:0;width:20px;height:20px}
+
+/* Disabled section label */
+.disabled-label{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.pulse{animation:pulse 2s infinite}
+</style>
+</head>
+<body>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<div class="header">
+  <h1>🔑 API Keys <span class="brand">OpenClaw</span></h1>
+  <div class="header-right">
+    <span class="refresh-badge" id="lastRefresh">—</span>
+    <button class="btn" onclick="refreshAll()">Refresh</button>
+    <button class="btn" onclick="testAllKeys()">Test All</button>
+    <a href="/" class="back-link">← Dashboard</a>
+  </div>
+</div>
+
+<div class="container">
+  <!-- Left: API Keys -->
+  <div class="section" id="keysSection">
+    <div class="section-title">🔐 OpenClaw API Keys <span class="count" id="keysCount"></span></div>
+    <div class="summary" id="keysSummary"></div>
+    <div id="keysList"></div>
+  </div>
+
+  <!-- Right: OAuth Accounts -->
+  <div class="section" id="oauthSection">
+    <div class="section-title">☁️ Claude OAuth Accounts <span class="count" id="oauthCount"></span></div>
+    <div id="oauthList"></div>
+    <div id="oauthLoginArea"></div>
+  </div>
+</div>
+
+<script>
+let keysData = [], keysUsage = {}, keysTestResults = {}, oauthAccounts = {};
+let oauthPending = null, editingAccount = null, allKeyProfiles = [];
+let refreshTimer = null;
+
+document.addEventListener('DOMContentLoaded', () => { refreshAll(); startAutoRefresh(); });
+
+function startAutoRefresh() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refreshAll, 30000);
+}
+
+async function refreshAll() {
+  await Promise.all([loadKeys(), loadKeysUsage(), loadOAuthUsage()]);
+  render();
+  document.getElementById('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+}
+
+async function loadKeys() {
+  try {
+    const r = await fetch('/api/keys?t=' + Date.now());
+    const d = await r.json();
+    keysData = d.keys || [];
+    allKeyProfiles = keysData.map(k => k.name);
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+async function loadKeysUsage() {
+  try {
+    const r = await fetch('/api/keys/usage?t=' + Date.now());
+    keysUsage = await r.json();
+  } catch(e) { keysUsage = {}; }
+}
+
+async function loadOAuthUsage() {
+  try {
+    const r = await fetch('/api/keys/oauth/usage?t=' + Date.now());
+    oauthAccounts = await r.json();
+  } catch(e) { oauthAccounts = {}; }
+}
+
+function render() {
+  renderKeys();
+  renderOAuth();
+}
+
+// ── Keys Rendering ──
+function renderKeys() {
+  const enabled = keysData.filter(k => k.enabled).sort((a,b) => a.position - b.position);
+  const disabled = keysData.filter(k => !k.enabled);
+  const summary = keysUsage.summary || {};
+
+  document.getElementById('keysCount').textContent = `(${enabled.length} active / ${keysData.length} total)`;
+
+  document.getElementById('keysSummary').innerHTML = `
+    <div class="summary-item"><span class="summary-label">Active</span><span class="summary-value">${summary.activeKeys||0}/${summary.totalKeys||0}</span></div>
+    <div class="summary-item"><span class="summary-label">Errors</span><span class="summary-value" ${(summary.totalErrors||0)>0?'style="color:var(--red)"':''}>${summary.totalErrors||0}</span></div>
+    <div class="summary-item"><span class="summary-label">Last Rotation</span><span class="summary-value" style="font-size:12px">${summary.lastRotation ? timeAgo(summary.lastRotation) : '—'}</span></div>
+  `;
+
+  let html = enabled.map((k,i) => keyCard(k, i, true, enabled.length)).join('');
+  if (disabled.length) {
+    html += '<div class="disabled-label">Disabled</div>';
+    html += disabled.map((k,i) => keyCard(k, i, false, 0)).join('');
+  }
+  document.getElementById('keysList').innerHTML = html;
+}
+
+function keyCard(key, idx, isEnabled, totalEnabled) {
+  const usage = (keysUsage.keys || {})[key.name] || {};
+  const statusColor = !isEnabled ? 'red' : usage.status === 'active' ? 'green' : usage.status === 'error' ? 'yellow' : usage.status === 'idle' ? 'green' : 'gray';
+  const lastActive = usage.lastUsed ? timeAgo(usage.lastUsed) : 'never';
+  const errCount = usage.errorCount || 0;
+  const recency = usage.lastUsed ? Math.max(0, 100 - Math.min(100, (Date.now() - usage.lastUsed) / 36000)) : 0;
+  const shortName = key.name.replace(key.provider + ':', '');
+
+  const testRes = keysTestResults[key.name];
+  let testHtml = '';
+  if (testRes === 'testing') testHtml = '<span class="key-test-result" style="color:var(--yellow)">⏳</span>';
+  else if (testRes?.ok && testRes?.oauth) testHtml = `<span class="key-test-result" style="color:var(--green)" title="${esc(testRes.note||'')}">✅🔑</span>`;
+  else if (testRes?.ok) testHtml = `<span class="key-test-result" style="color:var(--green)" title="${esc(testRes.model||'')}">✅</span>`;
+  else if (testRes && !testRes.ok) testHtml = `<span class="key-test-result" style="color:var(--red)" title="${esc(testRes.error||'')}">❌</span>`;
+
+  return `<div class="key-card ${isEnabled?'':'disabled'}">
+    <div class="key-status-dot ${statusColor} ${statusColor==='green'&&usage.status==='active'?'pulse':''}"></div>
+    <div class="key-info">
+      <div class="key-name">${esc(shortName)}</div>
+      <div class="key-meta">
+        <span>${key.provider}</span><span>${key.mode}</span>
+        <span>Last: ${lastActive}</span>
+        ${errCount > 0 ? `<span style="color:var(--red)">${errCount} errors</span>` : ''}
+      </div>
+    </div>
+    <div class="key-usage-bar"><div class="key-usage-bar-fill" style="width:${Math.round(recency)}%;background:var(--${statusColor})"></div></div>
+    <span class="key-position ${isEnabled?'on':'off'}">${isEnabled ? '#'+(key.position+1) : 'OFF'}</span>
+    ${testHtml}
+    <div class="key-actions">
+      <button class="key-test-btn" onclick="testKey('${esc(key.name)}')">Test</button>
+      ${isEnabled ? `<button class="key-move-btn" onclick="moveKey('${esc(key.name)}',-1)" ${idx===0?'disabled':''}>▲</button>
+      <button class="key-move-btn" onclick="moveKey('${esc(key.name)}',1)" ${idx===totalEnabled-1?'disabled':''}>▼</button>` : ''}
+      <div class="key-toggle ${isEnabled?'on':''}" onclick="toggleKey('${esc(key.name)}',${!isEnabled})"><div class="knob"></div></div>
+    </div>
+  </div>`;
+}
+
+// ── OAuth Rendering ──
+function renderOAuth() {
+  const accounts = Object.entries(oauthAccounts).filter(([k]) => k !== 'error');
+  document.getElementById('oauthCount').textContent = `(${accounts.length})`;
+
+  let html = accounts.map(([email, data]) => oauthCard(email, data)).join('');
+  document.getElementById('oauthList').innerHTML = html;
+
+  // Login area
+  let loginHtml = '';
+  if (oauthPending?.step === 'code') {
+    loginHtml = `<div style="margin-top:4px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">Paste the authorization code:</div>
+      <div class="oauth-code-input">
+        <input type="text" id="oauthCodeInput" placeholder="code#state" onkeydown="if(event.key==='Enter')completeOAuth()">
+        <button class="btn primary" onclick="completeOAuth()">Connect</button>
+        <button class="btn" onclick="oauthPending=null;render()">Cancel</button>
+      </div>
+    </div>`;
+  } else if (oauthPending?.step === 'label') {
+    const keyOpts = allKeyProfiles.map(k => `<option value="${esc(k)}">${esc(k.split(':').pop())}</option>`).join('');
+    loginHtml = `<div style="margin-top:4px">
+      <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">✅ Connected! Name this account:</div>
+      <div class="oauth-code-input">
+        <input type="text" id="oauthLabelInput" placeholder="email or label" onkeydown="if(event.key==='Enter')saveOAuthLabel()">
+        <button class="btn primary" onclick="saveOAuthLabel()">Save</button>
+      </div>
+      <div style="margin-top:6px"><label style="font-size:10px;color:var(--text-dim)">Link to API key (optional)</label>
+        <select id="oauthLinkKey" style="width:100%;margin-top:2px;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font-size:12px">
+          <option value="">None</option>${keyOpts}
+        </select>
+      </div>
+    </div>`;
+  } else {
+    loginHtml = `<button class="oauth-login-btn" onclick="startOAuth()">☁️ ${accounts.length ? 'Add Another Account' : 'Connect Claude Account'}</button>`;
+  }
+  document.getElementById('oauthLoginArea').innerHTML = loginHtml;
+}
+
+function oauthCard(email, data) {
+  const label = data.label || email;
+  const linkedKey = data.linkedKey || '';
+  const isEditing = editingAccount?.email === email;
+
+  let editHtml = '';
+  if (isEditing) {
+    const keyOpts = allKeyProfiles.map(k => `<option value="${esc(k)}" ${k===editingAccount.linkedKey?'selected':''}>${esc(k.split(':').pop())}</option>`).join('');
+    editHtml = `<div class="edit-form">
+      <div><label>Label</label><input type="text" id="editLabel" value="${esc(label)}"></div>
+      <div><label>Link to API key</label><select id="editLink"><option value="">None</option>${keyOpts}</select></div>
+      <div class="btn-row"><button class="btn primary" onclick="saveEdit('${esc(email)}')">Save</button><button class="btn" onclick="editingAccount=null;render()">Cancel</button></div>
+    </div>`;
+  }
+
+  let usageHtml = '';
+  if (data.error) {
+    usageHtml = `<div class="oauth-error">⚠️ ${esc(data.message || data.error)}</div>`;
+  } else if (data.usage) {
+    const u = data.usage;
+    usageHtml = '<div class="oauth-usage-grid">';
+    const metrics = [
+      ['five_hour', 'Session (5h)'],
+      ['seven_day', 'Weekly (7d)'],
+      ['seven_day_sonnet', 'Sonnet (7d)'],
+      ['seven_day_opus', 'Opus (7d)'],
+      ['seven_day_oauth_apps', 'OAuth Apps (7d)'],
+      ['seven_day_cowork', 'Cowork (7d)'],
+      ['iguana_necktie', '🦎 Iguana'],
+    ];
+    for (const [key, name] of metrics) {
+      const m = u[key];
+      if (!m || m.utilization === undefined) continue;
+      const pct = m.utilization || 0;
+      usageHtml += `<div class="usage-item">
+        <div class="usage-label"><span>${name}</span><span>${pct.toFixed(1)}%</span></div>
+        <div class="usage-bar"><div class="usage-fill" style="width:${Math.min(pct,100)}%;background:${usageColor(pct)}"></div></div>
+        ${m.resets_at ? `<div class="usage-reset">Resets in ${formatReset(m.resets_at)}</div>` : ''}
+      </div>`;
+    }
+    usageHtml += '</div>';
+
+    if (u.extra_usage) {
+      if (u.extra_usage.is_enabled) {
+        const used = u.extra_usage.used_credits || 0;
+        const limit = u.extra_usage.monthly_limit || 0;
+        const pct = limit > 0 ? Math.min(100, (used/limit)*100) : 0;
+        usageHtml += `<div class="oauth-extra">💳 Extra: $${used.toFixed(2)} / $${limit} (${pct.toFixed(1)}%)
+          <div class="usage-bar" style="margin-top:4px"><div class="usage-fill" style="width:${pct}%;background:${usageColor(pct)}"></div></div>
+        </div>`;
+      } else {
+        usageHtml += `<div class="oauth-extra" style="opacity:.5">💳 Extra usage: disabled</div>`;
+      }
+    }
+
+    usageHtml += `<details><summary>Raw JSON</summary><pre>${esc(JSON.stringify(u,null,2))}</pre></details>`;
+  }
+
+  return `<div class="oauth-card">
+    <div class="oauth-header">
+      <div class="oauth-label">✅ ${esc(label)}${linkedKey ? ` <span class="oauth-linked">🔗 ${esc(linkedKey.split(':').pop())}</span>` : ''}${data.subscriptionType ? ` <span class="oauth-sub-type">(${esc(data.subscriptionType)})</span>` : ''}</div>
+      <div class="oauth-actions">
+        <button class="btn" onclick="editingAccount={email:'${esc(email)}',label:'${esc(label)}',linkedKey:'${esc(linkedKey)}'};render()" style="font-size:10px;padding:2px 8px">✏️ Edit</button>
+        <button class="btn danger" onclick="removeOAuth('${esc(email)}')" style="font-size:10px;padding:2px 8px">Remove</button>
+      </div>
+    </div>
+    ${editHtml}
+    ${usageHtml}
+  </div>`;
+}
+
+// ── API Actions ──
+async function toggleKey(name, enabled) {
+  await fetch('/api/keys/toggle', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profileName:name,enabled})});
+  await loadKeys(); render();
+}
+
+async function moveKey(name, dir) {
+  const key = keysData.find(k => k.name === name);
+  if (!key) return;
+  const ordered = keysData.filter(k => k.enabled && k.provider === key.provider).sort((a,b) => a.position - b.position);
+  const idx = ordered.findIndex(k => k.name === name);
+  const ni = idx + dir;
+  if (ni < 0 || ni >= ordered.length) return;
+  [ordered[idx], ordered[ni]] = [ordered[ni], ordered[idx]];
+  await fetch('/api/keys/reorder', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({provider:key.provider,order:ordered.map(k=>k.name)})});
+  await loadKeys(); render();
+}
+
+async function testKey(name) {
+  keysTestResults[name] = 'testing'; render();
+  try {
+    const r = await fetch('/api/keys/test', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profileName:name})});
+    const d = await r.json();
+    keysTestResults[name] = d[name] || {ok:false,error:'Unknown'};
+  } catch(e) { keysTestResults[name] = {ok:false,error:e.message}; }
+  render();
+}
+
+async function testAllKeys() {
+  keysData.forEach(k => { keysTestResults[k.name] = 'testing'; }); render();
+  try {
+    const r = await fetch('/api/keys/test-all', {method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});
+    Object.assign(keysTestResults, await r.json());
+  } catch(e) { toast('error','Error',e.message); }
+  render();
+}
+
+async function startOAuth() {
+  try {
+    const r = await fetch('/api/keys/oauth/start', {method:'POST'});
+    const d = await r.json();
+    if (d.error) { toast('error','OAuth Error',d.error); return; }
+    oauthPending = {...d, step:'code'};
+    window.open(d.authUrl, '_blank');
+    render();
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+async function completeOAuth() {
+  const input = document.getElementById('oauthCodeInput');
+  if (!input?.value.trim() || !oauthPending) return;
+  try {
+    const r = await fetch('/api/keys/oauth/complete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:oauthPending.sessionId,code:input.value.trim()})});
+    const d = await r.json();
+    if (d.error) { toast('error','OAuth Error',d.error); return; }
+    oauthPending = {step:'label',accountId:d.email};
+    await loadOAuthUsage(); render();
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+async function saveOAuthLabel() {
+  const label = document.getElementById('oauthLabelInput')?.value.trim() || oauthPending.accountId;
+  const linkedKey = document.getElementById('oauthLinkKey')?.value || '';
+  try {
+    await fetch('/api/keys/oauth/update', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:oauthPending.accountId,label,linkedKey})});
+    oauthPending = null;
+    toast('success','Saved',`✅ ${label}`);
+    await loadOAuthUsage(); render();
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+async function saveEdit(email) {
+  const label = document.getElementById('editLabel')?.value.trim() || email;
+  const linkedKey = document.getElementById('editLink')?.value || '';
+  try {
+    await fetch('/api/keys/oauth/update', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({accountId:email,label,linkedKey})});
+    editingAccount = null;
+    toast('success','Saved','Account updated');
+    await loadOAuthUsage(); render();
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+async function removeOAuth(email) {
+  if (!confirm(`Remove ${email}?`)) return;
+  await fetch('/api/keys/oauth/remove', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email})});
+  delete oauthAccounts[email];
+  render();
+}
+
+// ── Utilities ──
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const d = Date.now() - ts;
+  if (d < 60000) return Math.floor(d/1000)+'s ago';
+  if (d < 3600000) return Math.floor(d/60000)+'m ago';
+  if (d < 86400000) return Math.floor(d/3600000)+'h ago';
+  return Math.floor(d/86400000)+'d ago';
+}
+
+function usageColor(pct) {
+  if (pct < 50) return 'var(--green)';
+  if (pct < 80) return 'var(--yellow)';
+  return 'var(--red)';
+}
+
+function formatReset(iso) {
+  if (!iso) return '';
+  const d = new Date(iso) - Date.now();
+  if (d <= 0) return 'resetting...';
+  const h = Math.floor(d/3600000), m = Math.floor((d%3600000)/60000);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function esc(t) {
+  const d = document.createElement('div');
+  d.textContent = t;
+  return d.innerHTML;
+}
+
+function toast(type, title, msg) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.innerHTML = `<div class="toast-icon">${{success:'✓',error:'✗',info:'•'}[type]||'•'}</div><div><div class="toast-title">${title}</div><div class="toast-message">${msg}</div></div><button class="toast-close" onclick="this.parentElement.remove()">×</button>`;
+  c.appendChild(t);
+  setTimeout(() => t.classList.add('show'), 16);
+  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 5000);
+}
+</script>
+</body>
+</html>
