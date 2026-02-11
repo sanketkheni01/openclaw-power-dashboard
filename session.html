@@ -410,9 +410,11 @@ async function loadTranscript(sessionId) {
   const container = document.getElementById('logContainer');
   container.innerHTML = '<div class="loading">Loading transcript...</div>';
   try {
-    const r = await fetch(`/data/transcript/${sessionId}?limit=200`);
+    const r = await fetch(`/data/transcript/${sessionId}?limit=200&t=` + Date.now());
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
+    const txt = await r.text();
+    if (!txt) throw new Error('Empty response');
+    const d = JSON.parse(txt);
     if (d.error) { container.innerHTML = `<div class="loading">${d.error}</div>`; return; }
     transcriptEntries = d.entries || [];
     transcriptTotal = d.total || transcriptEntries.length;
@@ -505,9 +507,11 @@ async function sendMessage() {
 
 async function init() {
   try {
-    const r = await fetch('/data/sessions.json');
+    const r = await fetch('/data/sessions.json?t=' + Date.now());
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    const d = await r.json();
+    const txt = await r.text();
+    if (!txt) throw new Error('Empty response');
+    const d = JSON.parse(txt);
     allSessions = d.sessions || [];
     if (d.topicNames) topicNamesMap = d.topicNames;
     session = allSessions.find(s => s.key === sessionKey);
