@@ -1957,8 +1957,10 @@ async function completeOAuthLogin() {
     if (d.error) { showToast('error','OAuth Error', d.error); return; }
     // Move to label step
     oauthPending = {step: 'label', accountId: d.email, suggestedLabel: ''};
-    // Store all key profile names for linking dropdown
-    window._allKeyProfiles = Object.keys(window._lastAuthData?.profiles || {});
+    // Ensure key profiles are loaded for linking dropdown
+    if (!window._allKeyProfiles || !window._allKeyProfiles.length) {
+      await loadKeysData();
+    }
     await loadOAuthUsage();
     renderKeysModal();
   } catch(e) { showToast('error','Error',e.message); }
@@ -1979,6 +1981,33 @@ async function saveOAuthLabel() {
     if (d.error) { showToast('error','Error', d.error); return; }
     oauthPending = null;
     showToast('success','Saved', `✅ ${label}`);
+    await loadOAuthUsage();
+    renderKeysModal();
+  } catch(e) { showToast('error','Error',e.message); }
+}
+
+let oauthEditingAccount = null;
+
+function editOAuthAccount(email, currentLabel, currentLinkedKey) {
+  oauthEditingAccount = {email, label: currentLabel, linkedKey: currentLinkedKey};
+  renderKeysModal();
+}
+
+async function saveOAuthEdit() {
+  if (!oauthEditingAccount) return;
+  const labelInput = document.getElementById('oauthEditLabel');
+  const linkSelect = document.getElementById('oauthEditLink');
+  const label = labelInput ? labelInput.value.trim() : oauthEditingAccount.label;
+  const linkedKey = linkSelect ? linkSelect.value : '';
+  try {
+    const r = await fetch('/api/keys/oauth/update', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({accountId: oauthEditingAccount.email, label, linkedKey})
+    });
+    const d = await r.json();
+    if (d.error) { showToast('error','Error', d.error); return; }
+    showToast('success','Saved','Account updated');
+    oauthEditingAccount = null;
     await loadOAuthUsage();
     renderKeysModal();
   } catch(e) { showToast('error','Error',e.message); }
@@ -2026,9 +2055,20 @@ function renderOAuthSection() {
       <div class="oauth-account-header">
         <div class="oauth-account-email">✅ ${escapeHtml(label)}${linkedKey ? ` <span style="font-size:10px;padding:1px 5px;background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:3px;color:var(--text-muted)">🔗 ${escapeHtml(linkedKey.split(':').pop())}</span>` : ''}${data.subscriptionType ? ` <span style="font-size:10px;color:var(--text-dim)">(${escapeHtml(data.subscriptionType)})</span>` : ''}</div>
         <div class="oauth-account-actions">
+          <button class="oauth-remove-btn" onclick="editOAuthAccount('${escapeHtml(email)}','${escapeHtml(label)}','${escapeHtml(linkedKey)}')" style="border-color:var(--border-subtle);color:var(--text-muted)">✏️ Edit</button>
           <button class="oauth-remove-btn" onclick="removeOAuthAccount('${escapeHtml(email)}')">Remove</button>
         </div>
       </div>`;
+
+    // Edit form
+    if (oauthEditingAccount && oauthEditingAccount.email === email) {
+      const keyOpts = (window._allKeyProfiles||[]).map(k => `<option value="${escapeHtml(k)}" ${k===oauthEditingAccount.linkedKey?'selected':''}>${escapeHtml(k.split(':').pop())}</option>`).join('');
+      html += `<div style="margin-bottom:8px;padding:8px;background:var(--bg-base);border-radius:4px">
+        <div style="margin-bottom:6px"><label style="font-size:10px;color:var(--text-dim)">Label</label><input type="text" id="oauthEditLabel" value="${escapeHtml(label)}" style="width:100%;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font-size:12px;margin-top:2px"></div>
+        <div style="margin-bottom:6px"><label style="font-size:10px;color:var(--text-dim)">Link to API key</label><select id="oauthEditLink" style="width:100%;padding:4px 8px;background:var(--bg-elevated);border:1px solid var(--border-default);border-radius:4px;color:var(--text-secondary);font-size:12px;margin-top:2px"><option value="">None</option>${keyOpts}</select></div>
+        <div style="display:flex;gap:4px"><button class="btn primary" onclick="saveOAuthEdit()">Save</button><button class="btn" onclick="oauthEditingAccount=null;renderKeysModal()">Cancel</button></div>
+      </div>`;
+    }
 
     if (data.error) {
       html += `<div class="oauth-error">⚠️ ${escapeHtml(data.message || data.error)}</div>`;
