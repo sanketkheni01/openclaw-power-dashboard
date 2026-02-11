@@ -411,6 +411,7 @@ async function loadTranscript(sessionId) {
   container.innerHTML = '<div class="loading">Loading transcript...</div>';
   try {
     const r = await fetch(`/data/transcript/${sessionId}?limit=200`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     if (d.error) { container.innerHTML = `<div class="loading">${d.error}</div>`; return; }
     transcriptEntries = d.entries || [];
@@ -432,6 +433,7 @@ function setupInfiniteScroll(sessionId, container) {
     const loadLimit = transcriptOffset - loadOffset;
     try {
       const r = await fetch(`/data/transcript/${sessionId}?offset=${loadOffset}&limit=${loadLimit}`);
+      if (!r.ok) { _loadingMore = false; return; }
       const d = await r.json();
       if (d.entries?.length) {
         transcriptEntries = [...d.entries, ...transcriptEntries];
@@ -448,7 +450,10 @@ function setupInfiniteScroll(sessionId, container) {
 async function refreshTranscript(sessionId) {
   try {
     const r = await fetch(`/data/transcript/${sessionId}?limit=100`);
-    const d = await r.json();
+    if (!r.ok) return;
+    const text = await r.text();
+    if (!text) return;
+    const d = JSON.parse(text);
     if (!d.entries) return;
     const container = document.getElementById('logContainer');
     const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
@@ -485,7 +490,8 @@ async function sendMessage() {
       method: 'POST', headers: {'Content-Type':'application/json'},
       body: JSON.stringify({sessionId: session.sessionId, message: msg})
     });
-    const data = await res.json();
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (res.ok && data.status === 'sent') {
       input.value = '';
       showToast('success','Sent','Message sent');
@@ -500,6 +506,7 @@ async function sendMessage() {
 async function init() {
   try {
     const r = await fetch('/data/sessions.json');
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const d = await r.json();
     allSessions = d.sessions || [];
     if (d.topicNames) topicNamesMap = d.topicNames;
