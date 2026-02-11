@@ -237,10 +237,23 @@ function formatBadgeLabel(type) {
   return labels[type] || type;
 }
 
+let topicNamesMap = {};
+
 function getSessionName(s) {
   if (s.label) return s.label;
-  if (s.displayName) return s.displayName;
-  return s.key.split(':').pop().slice(0, 12);
+  const topicMatch = s.key.match(/topic:(\d+)/);
+  if (topicMatch) {
+    const topicId = topicMatch[1];
+    const topicName = topicNamesMap[topicId];
+    if (topicName) return topicName;
+    return s.subject ? `${s.subject} #${topicId}` : `Topic ${topicId}`;
+  }
+  if (s.subject) return s.subject;
+  if (s.displayName) return s.displayName.replace('telegram:', '').replace('g-', 'Group ');
+  if (s.key.includes(':main:main')) return 'Main DM';
+  const cronMatch = s.key.match(/cron:(.{8})/);
+  if (cronMatch) return `Cron ${cronMatch[1]}`;
+  return s.key.split(':').slice(-2).join(':');
 }
 
 function showToast(type, title, msg) {
@@ -489,6 +502,7 @@ async function init() {
     const r = await fetch('/data/sessions.json');
     const d = await r.json();
     allSessions = d.sessions || [];
+    if (d.topicNames) topicNamesMap = d.topicNames;
     session = allSessions.find(s => s.key === sessionKey);
 
     if (!session) {
