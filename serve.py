@@ -919,6 +919,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('/session/'):
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
             self.end_headers()
             with open(os.path.join(DIR, 'session.html'), 'rb') as f:
                 self.wfile.write(f.read())
