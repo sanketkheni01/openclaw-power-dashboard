@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import http.server, json, os, socketserver, glob, time, threading, asyncio, websockets
+import http.server, json, os, socketserver, glob, time, threading, asyncio, websockets, urllib.request, urllib.error
 from datetime import datetime, timedelta
 import subprocess
 from watchdog.observers import Observer
@@ -425,11 +425,191 @@ def get_sessions_with_activity():
     except Exception as e:
         return json.dumps({'error': str(e), 'count': 0, 'sessions': []})
 
+def _test_anthropic_key(cred, profile_name=''):
+    """Test an Anthropic API key. OAuth tokens check usage stats; API keys call messages API."""
+    token = cred.get('token') or cred.get('key') or ''
+    if not token:
+        return {'ok': False, 'error': 'No token/key found'}
+    
+    is_oauth = token.startswith('sk-ant-oat')
+    
+    if is_oauth:
+        # OAuth tokens (from Claude Code setup-token) can ONLY be used through OpenClaw's
+        # gateway — they're restricted to Claude Code client. We check usage stats instead.
+        try:
+            with open('/root/.openclaw/agents/main/agent/auth-profiles.json') as f:
+                store = json.load(f)
+            usage = store.get('usageStats', {})
+            stats = usage.get(profile_name, {})
+            last_ok = stats.get('lastUsed', 0)
+            last_err = stats.get('lastFailureAt', 0)
+            total_err = stats.get('errorCount', 0)
+            last_error_msg = stats.get('lastError', '')
+            total_ok = 1 if last_ok > 0 else 0  # no okCount tracked
+            
+            if last_ok > 0 and last_ok >= last_err:
+                # Format last success time
+                from datetime import datetime
+                last_ok_str = datetime.fromtimestamp(last_ok / 1000).strftime('%H:%M:%S') if last_ok > 1e12 else datetime.fromtimestamp(last_ok).strftime('%H:%M:%S')
+                return {
+                    'ok': True, 'oauth': True,
+                    'note': f'Last used successfully at {last_ok_str} ({total_ok} ok, {total_err} errors)'
+                }
+            elif last_err > last_ok and last_error_msg:
+                return {
+                    'ok': False, 'oauth': True,
+                    'error': f'Last error: {last_error_msg} ({total_err} errors)'
+                }
+            elif total_ok == 0 and total_err == 0:
+                # No usage data — token exists but hasn't been used yet
+                return {'ok': True, 'oauth': True, 'note': 'OAuth token present (no usage data yet)'}
+            else:
+                return {'ok': True, 'oauth': True, 'note': f'OAuth token ({total_ok} ok, {total_err} errors)'}
+        except Exception as e:
+            return {'ok': True, 'oauth': True, 'note': 'OAuth token present (cannot read usage stats)'}
+    
+    # Regular API keys — test with a minimal messages call
+    try:
+        payload = json.dumps({
+            'model': 'claude-3-5-haiku-20241022',
+            'max_tokens': 1,
+            'messages': [{'role': 'user', 'content': 'hi'}]
+        }).encode()
+        headers = {
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json',
+            'x-api-key': token,
+        }
+        req = urllib.request.Request(
+            'https://api.anthropic.com/v1/messages',
+            data=payload,
+            headers=headers
+        )
+        resp = urllib.request.urlopen(req, timeout=15)
+        data = json.loads(resp.read())
+        return {'ok': True, 'model': data.get('model', '')}
+    except urllib.error.HTTPError as e:
+        try:
+            body = json.loads(e.read())
+            msg = body.get('error', {}).get('message', str(e))
+        except:
+            msg = str(e)
+        return {'ok': False, 'error': msg}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=DIR, **kw)
     
     def do_POST(self):
+        content_type = self.headers.get('Content-Type', '')
+
+        if self.path == '/api/keys/toggle':
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            profile_name = body.get('profileName', '')
+            enabled = body.get('enabled', True)
+            try:
+                with open('/root/.openclaw/openclaw.json') as f:
+                    cfg = json.load(f)
+                auth = cfg.setdefault('auth', {})
+                profiles = auth.get('profiles', {})
+                if profile_name not in profiles:
+                    self.send_response(404)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': 'Profile not found'}).encode())
+                    return
+                provider = profiles[profile_name].get('provider', '')
+                order = auth.setdefault('order', {})
+                provider_order = order.setdefault(provider, [])
+                if enabled:
+                    if profile_name not in provider_order:
+                        provider_order.append(profile_name)
+                else:
+                    if profile_name in provider_order:
+                        provider_order.remove(profile_name)
+                with open('/root/.openclaw/openclaw.json', 'w') as f:
+                    json.dump(cfg, f, indent=2)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok'}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
+        if self.path == '/api/keys/reorder':
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            provider = body.get('provider', '')
+            new_order = body.get('order', [])
+            try:
+                with open('/root/.openclaw/openclaw.json') as f:
+                    cfg = json.load(f)
+                cfg.setdefault('auth', {}).setdefault('order', {})[provider] = new_order
+                with open('/root/.openclaw/openclaw.json', 'w') as f:
+                    json.dump(cfg, f, indent=2)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok'}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
+        if self.path in ('/api/keys/test', '/api/keys/test-all'):
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            try:
+                auth_store_path = '/root/.openclaw/agents/main/agent/auth-profiles.json'
+                with open(auth_store_path) as f:
+                    store = json.load(f)
+                store_profiles = store.get('profiles', {})
+
+                if self.path == '/api/keys/test':
+                    profile_name = body.get('profileName', '')
+                    cred = store_profiles.get(profile_name)
+                    if not cred:
+                        self.send_response(404)
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(json.dumps({'error': 'Profile not found in auth store'}).encode())
+                        return
+                    result = _test_anthropic_key(cred, profile_name)
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({profile_name: result}).encode())
+                else:
+                    results = {}
+                    with open('/root/.openclaw/openclaw.json') as f:
+                        cfg = json.load(f)
+                    all_profiles = cfg.get('auth', {}).get('profiles', {})
+                    for pname in all_profiles:
+                        cred = store_profiles.get(pname)
+                        if cred:
+                            results[pname] = _test_anthropic_key(cred, pname)
+                        else:
+                            results[pname] = {'ok': False, 'error': 'No credentials in auth store'}
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps(results).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
         if self.path == '/api/pin':
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length).decode()
@@ -469,9 +649,90 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
                 return
         
+        if self.path == '/api/send-message':
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length).decode()
+            try:
+                data = json.loads(body)
+                session_id = data.get('sessionId', '')
+                message = data.get('message', '')
+                if not session_id or not message:
+                    self.send_response(400)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"sessionId and message required"}')
+                    return
+                # Look up session key from session ID
+                session_key = None
+                try:
+                    with open(SESSIONS_FILE) as f:
+                        sessions_data = json.load(f)
+                    for key, sess in sessions_data.items():
+                        if sess.get('sessionId') == session_id:
+                            session_key = key
+                            break
+                except:
+                    pass
+                if not session_key:
+                    self.send_response(404)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(b'{"error":"Session key not found"}')
+                    return
+                # Fire-and-forget via gateway API (faster than CLI)
+                subprocess.Popen(
+                    ['node', '--import', 'tsx', '/root/.openclaw/workspace/dashboard/send-message.mjs', session_key, message],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    cwd='/root/openclaw'
+                )
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"status":"sent"}')
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                return
+
         super().do_POST()
     
     def do_GET(self):
+        if self.path.startswith('/api/keys'):
+            try:
+                with open('/root/.openclaw/openclaw.json') as f:
+                    cfg = json.load(f)
+                auth = cfg.get('auth', {})
+                profiles = auth.get('profiles', {})
+                order = auth.get('order', {})
+                keys_data = []
+                for name, prof in profiles.items():
+                    provider = prof.get('provider', '')
+                    provider_order = order.get(provider, [])
+                    enabled = name in provider_order
+                    position = provider_order.index(name) if enabled else -1
+                    keys_data.append({
+                        'name': name,
+                        'provider': provider,
+                        'mode': prof.get('mode', ''),
+                        'enabled': enabled,
+                        'position': position
+                    })
+                keys_data.sort(key=lambda x: (x['provider'], x['position'] if x['enabled'] else 999, x['name']))
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({'keys': keys_data, 'order': order}).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
         if self.path.startswith('/data/system.json'):
             data = get_system_info()
             self.send_response(200)
