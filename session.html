@@ -270,16 +270,17 @@ function switchTab(tab, btn) {
 
 function renderSubagents() {
   const container = document.getElementById('subagentsContainer');
-  const children = allSessions.filter(s => {
+  const isMain = session.key.endsWith(':main');
+  const agents = allSessions.filter(s => {
     if (s.sessionType !== 'subagent') return false;
-    return s.parentKey === session.key || s.key.startsWith(session.key.replace(/:main$/, '') + ':subagent:');
-  }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-  let agents = children;
-  if (!agents.length) {
+    // For main session, show ALL sub-agents
+    if (isMain) return true;
+    // For other sessions, match by parentKey or children list
+    if (s.parentKey === session.key) return true;
     const childKeys = (session.children || []).map(c => c.key);
-    agents = allSessions.filter(s => childKeys.includes(s.key)).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  }
+    if (childKeys.includes(s.key)) return true;
+    return false;
+  }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
   if (!agents.length) {
     container.innerHTML = '<div class="empty-state"><p>No sub-agents found</p></div>';
@@ -498,8 +499,11 @@ async function init() {
       ${session.model ? `<span>${session.model.split('/').pop()}</span>` : ''}
     `;
 
-    const hasSubagents = (session.children || []).some(c => c.key?.includes(':subagent:')) ||
-      allSessions.some(s => s.sessionType === 'subagent' && s.parentKey === session.key);
+    const isMain = session.key.endsWith(':main');
+    const hasSubagents = isMain
+      ? allSessions.some(s => s.sessionType === 'subagent')
+      : (session.children || []).some(c => c.key?.includes(':subagent:')) ||
+        allSessions.some(s => s.sessionType === 'subagent' && s.parentKey === session.key);
     if (hasSubagents) document.getElementById('panelTabs').style.display = '';
 
     await loadTranscript(session.sessionId);

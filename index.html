@@ -1344,8 +1344,11 @@ async function openSession(sessionKey, event) {
     ${session.status === 'running' ? '<span style="color:rgba(34,197,94,.7)">live</span>' : ''}
   `;
   // Show sub-agents tab if session has children or is main
-  const hasSubagentChildren = (session.children || []).some(c => c.key && c.key.includes(':subagent:')) ||
-    allSessions.some(s => s.sessionType === 'subagent' && (s.parentKey === session.key));
+  const isMainSession = session.key.endsWith(':main');
+  const hasSubagentChildren = isMainSession
+    ? allSessions.some(s => s.sessionType === 'subagent')
+    : (session.children || []).some(c => c.key && c.key.includes(':subagent:')) ||
+      allSessions.some(s => s.sessionType === 'subagent' && s.parentKey === session.key);
   const tabsEl = document.getElementById('panelTabs');
   tabsEl.style.display = hasSubagentChildren ? '' : 'none';
   // Reset to transcript tab
@@ -1371,26 +1374,21 @@ function switchPanelTab(tab, btn) {
 
 function renderSubagentsPanel(session) {
   const container = document.getElementById('subagentsContainer');
-  // Find all sub-agents that belong to this session
-  const children = allSessions.filter(s => {
+  const isMain = session.key.endsWith(':main');
+  const childKeys = (session.children || []).map(c => c.key);
+  const agents = allSessions.filter(s => {
     if (s.sessionType !== 'subagent') return false;
-    // Match by parent key or by key prefix
-    return s.parentKey === session.key || s.key.startsWith(session.key.replace(/:main$/, '') + ':subagent:');
+    if (isMain) return true;
+    if (s.parentKey === session.key) return true;
+    if (childKeys.includes(s.key)) return true;
+    return false;
   }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
 
-  if (!children.length) {
-    // Also check session.children
-    const childKeys = (session.children || []).map(c => c.key);
-    const fromChildren = allSessions.filter(s => childKeys.includes(s.key))
-      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    if (!fromChildren.length) {
-      container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;font-size:12px">No sub-agents found for this session</div>';
-      return;
-    }
-    renderSubagentCards(container, fromChildren);
+  if (!agents.length) {
+    container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;font-size:12px">No sub-agents found for this session</div>';
     return;
   }
-  renderSubagentCards(container, children);
+  renderSubagentCards(container, agents);
 }
 
 function renderSubagentCards(container, agents) {
