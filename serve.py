@@ -711,6 +711,85 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_POST()
     
     def do_GET(self):
+        if self.path.startswith('/api/keys/usage'):
+            try:
+                # Load usage stats from auth-profiles.json
+                with open('/root/.openclaw/agents/main/agent/auth-profiles.json') as f:
+                    store = json.load(f)
+                usage_stats = store.get('usageStats', {})
+
+                # Load config for profile list
+                with open('/root/.openclaw/openclaw.json') as f:
+                    cfg = json.load(f)
+                profiles = cfg.get('auth', {}).get('profiles', {})
+                order = cfg.get('auth', {}).get('order', {})
+
+                now = time.time() * 1000
+                result = {'keys': {}, 'summary': {}}
+                active_count = 0
+                total_errors = 0
+
+                for name in profiles:
+                    stats = usage_stats.get(name, {})
+                    last_used = stats.get('lastUsed', 0)
+                    error_count = stats.get('errorCount', 0)
+                    last_failure = stats.get('lastFailureAt', 0)
+                    last_error = stats.get('lastError', '')
+
+                    # Determine status
+                    if last_used == 0 and last_failure == 0:
+                        status = 'unused'
+                    elif error_count > 0 and last_failure > last_used:
+                        status = 'error'
+                    elif last_used > 0 and (now - last_used) < 600000:  # 10 min
+                        status = 'active'
+                    elif last_used > 0:
+                        status = 'idle'
+                    else:
+                        status = 'unused'
+
+                    if status == 'active':
+                        active_count += 1
+                    total_errors += error_count
+
+                    # Check if enabled
+                    provider = profiles[name].get('provider', '')
+                    provider_order = order.get(provider, [])
+                    enabled = name in provider_order
+
+                    result['keys'][name] = {
+                        'lastUsed': last_used,
+                        'errorCount': error_count,
+                        'lastFailureAt': last_failure,
+                        'lastError': last_error,
+                        'status': status,
+                        'enabled': enabled,
+                    }
+
+                # Find last rotation (most recent lastUsed across all keys)
+                all_last_used = [s.get('lastUsed', 0) for s in usage_stats.values()]
+                last_rotation = max(all_last_used) if all_last_used else 0
+
+                result['summary'] = {
+                    'activeKeys': active_count,
+                    'totalKeys': len(profiles),
+                    'totalErrors': total_errors,
+                    'lastRotation': last_rotation,
+                    'timestamp': now,
+                }
+
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+            return
+
         if self.path.startswith('/api/keys'):
             try:
                 with open('/root/.openclaw/openclaw.json') as f:
