@@ -365,6 +365,19 @@ body{
 }
 .panel-controls{display:flex;gap:4px;align-items:center}
 
+.panel-tabs{display:flex;gap:0;border-bottom:1px solid var(--border-subtle);flex-shrink:0;background:var(--bg-elevated);padding:0 12px}
+.panel-tab{padding:6px 14px;font-size:11px;color:var(--text-muted);background:none;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:all .15s}
+.panel-tab:hover{color:var(--text-secondary)}
+.panel-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.subagent-card{background:var(--bg-elevated);border:1px solid var(--border-subtle);border-radius:6px;padding:10px 12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.subagent-card:hover{border-color:var(--border-default)}
+.subagent-card-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.subagent-card-name{font-size:13px;font-weight:500;color:var(--text-primary)}
+.subagent-card-meta{font-size:10px;color:var(--text-dim);display:flex;gap:8px;flex-wrap:wrap}
+.subagent-card-status{font-size:10px;padding:1px 6px;border-radius:3px}
+.subagent-card-status.running{background:rgba(34,197,94,.1);color:rgba(34,197,94,.7)}
+.subagent-card-status.completed{background:rgba(59,130,246,.1);color:rgba(59,130,246,.7)}
+.subagent-card-status.error{background:rgba(239,68,68,.1);color:rgba(239,68,68,.7)}
 .panel-meta{
   padding:8px 16px;font-size:11px;color:var(--text-dim);
   border-bottom:1px solid var(--border-subtle);
@@ -818,9 +831,14 @@ body{
       </div>
     </div>
     <div class="panel-meta" id="panelMeta"></div>
+    <div class="panel-tabs" id="panelTabs" style="display:none">
+      <button class="panel-tab active" data-tab="transcript" onclick="switchPanelTab('transcript',this)">Transcript</button>
+      <button class="panel-tab" data-tab="subagents" onclick="switchPanelTab('subagents',this)">Sub-agents</button>
+    </div>
     <div class="log-container" id="logContainer">
       <div class="loading-spinner">Loading transcript...</div>
     </div>
+    <div class="subagents-container" id="subagentsContainer" style="display:none;flex:1;overflow-y:auto;padding:12px"></div>
     <div class="send-bar" id="sendBar">
       <input type="text" id="sendInput" placeholder="Send a message to this session…" autocomplete="off"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSessionMessage()}" />
@@ -1317,6 +1335,13 @@ async function openSession(sessionKey, event) {
     <span class="badge badge-${session.sessionType || 'other'}">${formatBadgeLabel(session.sessionType || 'other')}</span>
     ${session.status === 'running' ? '<span style="color:rgba(34,197,94,.7)">live</span>' : ''}
   `;
+  // Show sub-agents tab if session has children or is main
+  const hasSubagentChildren = (session.children || []).some(c => c.key && c.key.includes(':subagent:')) ||
+    allSessions.some(s => s.sessionType === 'subagent' && (s.parentKey === session.key));
+  const tabsEl = document.getElementById('panelTabs');
+  tabsEl.style.display = hasSubagentChildren ? '' : 'none';
+  // Reset to transcript tab
+  switchPanelTab('transcript', tabsEl.querySelector('[data-tab="transcript"]'));
   await loadTranscript(session.sessionId);
   // Start live polling for transcript
   if (window._transcriptInterval) clearInterval(window._transcriptInterval);
@@ -1325,6 +1350,63 @@ async function openSession(sessionKey, event) {
       refreshTranscript(selectedSession.sessionId);
     }
   }, 3000);
+}
+
+function switchPanelTab(tab, btn) {
+  document.querySelectorAll('.panel-tab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.getElementById('logContainer').style.display = tab === 'transcript' ? '' : 'none';
+  document.getElementById('sendBar').style.display = tab === 'transcript' ? '' : 'none';
+  document.getElementById('subagentsContainer').style.display = tab === 'subagents' ? '' : 'none';
+  if (tab === 'subagents' && selectedSession) renderSubagentsPanel(selectedSession);
+}
+
+function renderSubagentsPanel(session) {
+  const container = document.getElementById('subagentsContainer');
+  // Find all sub-agents that belong to this session
+  const children = allSessions.filter(s => {
+    if (s.sessionType !== 'subagent') return false;
+    // Match by parent key or by key prefix
+    return s.parentKey === session.key || s.key.startsWith(session.key.replace(/:main$/, '') + ':subagent:');
+  }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  if (!children.length) {
+    // Also check session.children
+    const childKeys = (session.children || []).map(c => c.key);
+    const fromChildren = allSessions.filter(s => childKeys.includes(s.key))
+      .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    if (!fromChildren.length) {
+      container.innerHTML = '<div style="text-align:center;color:var(--text-dim);padding:20px;font-size:12px">No sub-agents found for this session</div>';
+      return;
+    }
+    renderSubagentCards(container, fromChildren);
+    return;
+  }
+  renderSubagentCards(container, children);
+}
+
+function renderSubagentCards(container, agents) {
+  container.innerHTML = `<div style="font-size:11px;color:var(--text-dim);margin-bottom:8px">${agents.length} sub-agent${agents.length !== 1 ? 's' : ''}</div>` +
+    agents.map(s => {
+      const status = s.status === 'running' ? 'running' : (s.abortedLastRun ? 'error' : 'completed');
+      const statusLabel = status === 'running' ? '● running' : (status === 'error' ? '✗ error' : '✓ done');
+      const name = s.label || s.displayName || s.key.split(':').pop().slice(0, 8);
+      const tokens = s.totalTokens ? `${(s.totalTokens/1000).toFixed(1)}k tok` : '';
+      const model = s.model ? s.model.split('/').pop() : '';
+      const ago = s.updatedAt ? formatTime(s.updatedAt) + ' ago' : '';
+      return `<div class="subagent-card" onclick="openSession('${escapeHtml(s.key)}')">
+        <div class="subagent-card-header">
+          <div class="subagent-card-name">${escapeHtml(name)}</div>
+          <span class="subagent-card-status ${status}">${statusLabel}</span>
+        </div>
+        <div class="subagent-card-meta">
+          ${model ? `<span>🤖 ${escapeHtml(model)}</span>` : ''}
+          ${tokens ? `<span>📊 ${tokens}</span>` : ''}
+          ${ago ? `<span>🕐 ${ago}</span>` : ''}
+          ${s.channel ? `<span>📡 ${escapeHtml(s.channel)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
 }
 
 function closePanel() {
