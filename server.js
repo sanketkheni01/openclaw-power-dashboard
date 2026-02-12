@@ -176,5 +176,5 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🎛️  Dashboard: http://localhost:${PORT}`);
-  console.log(`🌐 Tailscale: http://100.94.239.70:${PORT}`);
+  console.log(`🌐 Tailscale: http://<tailscale-ip>:${PORT}`);
 });
