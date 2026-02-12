@@ -4,92 +4,97 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>System Load — OpenClaw</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg-base:#09090b;--bg-surface:#0c0c10;--bg-elevated:#141418;
-  --border-subtle:#1e1e24;--border-default:#2a2a32;
-  --text-primary:#fafafa;--text-secondary:#a1a1aa;--text-muted:#71717a;--text-dim:#3f3f46;
-  --accent:#7c6ff7;
-  --green:rgba(34,197,94,.7);--yellow:rgba(234,179,8,.6);--red:rgba(239,68,68,.7);
+:root{
+  --hull:#0a0c10;--panel:#0e1117;--shelf:#141820;--rack:#1a1f2a;
+  --wire:rgba(255,255,255,.06);--wire-mid:rgba(255,255,255,.09);
+  --ink:#e2e4e9;--ink-2:#9ca3af;--ink-3:#6b7280;--ink-4:#3d4452;
+  --amber:#e5954a;--amber-glow:rgba(229,149,74,.08);
+  --led-green:#4ade80;--led-yellow:#facc15;--led-red:#f87171;
+  --mono:'JetBrains Mono',monospace;
+  --radius:3px;
 }
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg-base);color:var(--text-primary);min-height:100dvh}
-a{color:var(--accent);text-decoration:none}
+body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:100dvh;font-size:11px;-webkit-font-smoothing:antialiased}
+a{color:var(--amber);text-decoration:none}
 a:hover{text-decoration:underline}
 
-.header{padding:12px 24px;border-bottom:1px solid var(--border-subtle);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg-base);z-index:50}
-.header h1{font-size:15px;font-weight:600;display:flex;align-items:center;gap:8px}
-.header nav{display:flex;gap:12px;font-size:12px}
-.status-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
-.dot-ok{background:#22c55e;animation:pulse 2s infinite}
-.dot-warn{background:#eab308}
-.dot-err{background:#ef4444}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.header{padding:4px 16px;border-bottom:1px solid var(--wire);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--panel);z-index:50;height:32px}
+.header h1{font-size:11px;font-weight:500;display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.header h1 .brand{color:var(--amber);font-weight:600}
+.header nav{display:flex;gap:10px;font-size:10px;align-items:center}
+.status-dot{width:5px;height:5px;border-radius:50%;display:inline-block}
+.dot-ok{background:var(--led-green);box-shadow:0 0 4px rgba(74,222,128,.4);animation:pulse 2s infinite}
+.dot-warn{background:var(--led-yellow)}
+.dot-err{background:var(--led-red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;padding:16px 24px}
-.card{background:var(--bg-surface);border:1px solid var(--border-subtle);border-radius:8px;padding:16px}
-.card-title{font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;font-weight:600}
-.metric{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border-subtle)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;padding:0;background:var(--wire)}
+.card{background:var(--panel);padding:12px 14px}
+.card-title{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px;font-weight:600}
+.metric{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--wire)}
 .metric:last-child{border-bottom:none}
-.metric-label{font-size:12px;color:var(--text-secondary)}
-.metric-value{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.metric-label{font-size:10px;color:var(--ink-3)}
+.metric-value{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums;color:var(--ink)}
 
-.bar-container{height:6px;background:var(--bg-elevated);border-radius:3px;overflow:hidden;margin-top:4px;width:100%}
-.bar-fill{height:100%;border-radius:3px;transition:width .3s}
-.bar-green{background:rgba(34,197,94,.6)}
-.bar-yellow{background:rgba(234,179,8,.6)}
-.bar-red{background:rgba(239,68,68,.6)}
+.bar-container{height:3px;background:var(--rack);border-radius:1px;overflow:hidden;margin-top:3px;width:100%}
+.bar-fill{height:100%;border-radius:1px;transition:width .3s}
+.bar-green{background:var(--led-green)}
+.bar-yellow{background:var(--led-yellow)}
+.bar-red{background:var(--led-red)}
 
 .wide{grid-column:1/-1}
-.process-table{width:100%;font-size:11px;border-collapse:collapse}
-.process-table th{text-align:left;color:var(--text-muted);font-weight:600;padding:4px 8px;border-bottom:1px solid var(--border-subtle);text-transform:uppercase;letter-spacing:.5px;font-size:10px}
-.process-table td{padding:4px 8px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
-.process-table tr:hover td{color:var(--text-primary)}
+.process-table{width:100%;font-size:10px;border-collapse:collapse}
+.process-table th{text-align:left;color:var(--ink-4);font-weight:600;padding:3px 6px;border-bottom:1px solid var(--wire);text-transform:uppercase;letter-spacing:.5px;font-size:9px}
+.process-table td{padding:3px 6px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.process-table tr:hover td{color:var(--ink)}
 
-.footer{padding:8px 24px;font-size:10px;color:var(--text-dim);border-top:1px solid var(--border-subtle);display:flex;justify-content:space-between}
-.refresh-indicator{font-size:10px;color:var(--text-dim)}
+.footer{padding:4px 16px;font-size:9px;color:var(--ink-4);border-top:1px solid var(--wire);display:flex;justify-content:space-between;background:var(--panel)}
+.refresh-indicator{font-size:9px;color:var(--ink-4);font-variant-numeric:tabular-nums}
 
-@media(max-width:768px){.grid{grid-template-columns:1fr;padding:8px}}
+@media(max-width:768px){.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="header">
-  <h1><span class="status-dot dot-ok" id="statusDot"></span> System Load</h1>
+  <h1><span class="status-dot dot-ok" id="statusDot"></span> <span class="brand">OPENCLAW</span> <span style="color:var(--ink-4)">│</span> system</h1>
   <nav>
-    <a href="/">← Sessions</a>
+    <a href="/">← sessions</a>
     <span class="refresh-indicator" id="lastUpdate"></span>
   </nav>
 </div>
 
 <div class="grid" id="dashboard">
   <div class="card" id="cpuCard">
-    <div class="card-title">CPU</div>
+    <div class="card-title">cpu</div>
     <div id="cpuMetrics"></div>
   </div>
   <div class="card" id="memCard">
-    <div class="card-title">Memory</div>
+    <div class="card-title">memory</div>
     <div id="memMetrics"></div>
   </div>
   <div class="card" id="diskCard">
-    <div class="card-title">Disk</div>
+    <div class="card-title">disk</div>
     <div id="diskMetrics"></div>
   </div>
   <div class="card" id="networkCard">
-    <div class="card-title">Network</div>
+    <div class="card-title">network</div>
     <div id="networkMetrics"></div>
   </div>
   <div class="card" id="systemCard">
-    <div class="card-title">System</div>
+    <div class="card-title">system</div>
     <div id="systemMetrics"></div>
   </div>
   <div class="card" id="servicesCard">
-    <div class="card-title">Services</div>
+    <div class="card-title">services</div>
     <div id="servicesMetrics"></div>
   </div>
   <div class="card wide" id="processCard">
-    <div class="card-title">Top Processes (by CPU)</div>
+    <div class="card-title">top processes (cpu)</div>
     <table class="process-table">
-      <thead><tr><th>PID</th><th>User</th><th>CPU%</th><th>MEM%</th><th>RSS</th><th>Command</th></tr></thead>
+      <thead><tr><th>pid</th><th>user</th><th>cpu%</th><th>mem%</th><th>rss</th><th>command</th></tr></thead>
       <tbody id="processTable"></tbody>
     </table>
   </div>
@@ -97,7 +102,7 @@ a:hover{text-decoration:underline}
 
 <div class="footer">
   <span id="footerUpdate"></span>
-  <span>Refreshes every 5s</span>
+  <span>refreshes every 5s</span>
 </div>
 
 <script>
@@ -130,63 +135,55 @@ async function load() {
     const d = await r.json();
     if (d.error) return;
 
-    // CPU
     const cpu = d.cpu || {};
     document.getElementById('cpuMetrics').innerHTML =
-      metric('Usage', cpu.usage_pct + '%', cpu.usage_pct) +
-      metric('Load 1m / 5m / 15m', cpu.load_avg || '—') +
-      metric('Cores', cpu.cores || '—') +
-      metric('Model', cpu.model || '—');
+      metric('usage', cpu.usage_pct + '%', cpu.usage_pct) +
+      metric('load 1m/5m/15m', cpu.load_avg || '—') +
+      metric('cores', cpu.cores || '—') +
+      metric('model', cpu.model || '—');
 
-    // Memory
     const mem = d.memory || {};
     document.getElementById('memMetrics').innerHTML =
-      metric('Used / Total', `${mem.used} / ${mem.total}`, mem.used_pct) +
-      metric('Available', mem.available || '—') +
-      metric('Swap', `${mem.swap_used || '0'} / ${mem.swap_total || '0'}`, mem.swap_pct || 0);
+      metric('used / total', `${mem.used} / ${mem.total}`, mem.used_pct) +
+      metric('available', mem.available || '—') +
+      metric('swap', `${mem.swap_used || '0'} / ${mem.swap_total || '0'}`, mem.swap_pct || 0);
 
-    // Disk
     const disks = d.disks || [];
     document.getElementById('diskMetrics').innerHTML = disks.map(dk =>
       metric(`${dk.mount} (${dk.fs})`, `${dk.used} / ${dk.size}`, dk.used_pct)
     ).join('');
 
-    // Network
     const net = d.network || {};
     document.getElementById('networkMetrics').innerHTML =
-      metric('RX', net.rx || '—') +
-      metric('TX', net.tx || '—') +
-      metric('Connections', net.connections || '—');
+      metric('rx', net.rx || '—') +
+      metric('tx', net.tx || '—') +
+      metric('connections', net.connections || '—');
 
-    // System
     const sys = d.system || {};
     document.getElementById('systemMetrics').innerHTML =
-      metric('Hostname', sys.hostname || '—') +
-      metric('Uptime', sys.uptime || '—') +
-      metric('Kernel', sys.kernel || '—') +
-      metric('Processes', sys.processes || '—');
+      metric('hostname', sys.hostname || '—') +
+      metric('uptime', sys.uptime || '—') +
+      metric('kernel', sys.kernel || '—') +
+      metric('processes', sys.processes || '—');
 
-    // Services
     const svcs = d.services || [];
     document.getElementById('servicesMetrics').innerHTML = svcs.map(s =>
       `<div class="metric">
-        <span class="metric-label"><span class="status-dot ${s.active ? 'dot-ok' : 'dot-err'}" style="margin-right:6px"></span>${s.name}</span>
-        <span class="metric-value" style="color:${s.active ? 'var(--green)' : 'var(--red)'}">${s.status}</span>
+        <span class="metric-label"><span class="status-dot ${s.active ? 'dot-ok' : 'dot-err'}" style="margin-right:4px"></span>${s.name}</span>
+        <span class="metric-value" style="color:${s.active ? 'var(--led-green)' : 'var(--led-red)'}">${s.status}</span>
       </div>`
     ).join('');
 
-    // Processes
     const procs = d.processes || [];
     document.getElementById('processTable').innerHTML = procs.map(p =>
-      `<tr><td>${p.pid}</td><td>${p.user}</td><td>${p.cpu}</td><td>${p.mem}</td><td>${p.rss}</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.cmd}</td></tr>`
+      `<tr><td>${p.pid}</td><td>${p.user}</td><td>${p.cpu}</td><td>${p.mem}</td><td>${p.rss}</td><td style="max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.cmd}</td></tr>`
     ).join('');
 
-    // Status dot
     const maxPct = Math.max(cpu.usage_pct || 0, mem.used_pct || 0);
     document.getElementById('statusDot').className = 'status-dot ' + dotClass(maxPct);
 
     document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
-    document.getElementById('footerUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    document.getElementById('footerUpdate').textContent = 'updated ' + new Date().toLocaleTimeString();
   } catch(e) {
     console.error(e);
   }
