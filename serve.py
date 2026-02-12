@@ -366,6 +366,88 @@ def get_auth_info():
     except:
         return {'profiles': {}, 'order': {}}
 
+def get_cron_jobs():
+    """Read cron jobs from jobs.json"""
+    try:
+        with open('/root/.openclaw/cron/jobs.json', 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        return {'version': 1, 'jobs': [], 'error': str(e)}
+
+def get_cron_runs(job_id):
+    """Read cron run history for a specific job"""
+    try:
+        file_path = f'/root/.openclaw/cron/runs/{job_id}.jsonl'
+        if not os.path.exists(file_path):
+            return {'runs': []}
+        
+        with open(file_path, 'r') as f:
+            lines = f.read().strip().split('\n')
+        
+        # Get last 20 lines
+        recent_lines = lines[-20:]
+        runs = []
+        for line in recent_lines:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                runs.append(json.loads(line))
+            except:
+                continue
+        
+        return {'runs': runs}
+    except Exception as e:
+        return {'runs': [], 'error': str(e)}
+
+def toggle_cron_job(job_id, enabled):
+    """Toggle cron job enabled/disabled"""
+    try:
+        with open('/root/.openclaw/cron/jobs.json', 'r') as f:
+            data = json.load(f)
+        
+        job = None
+        for j in data.get('jobs', []):
+            if j.get('id') == job_id:
+                job = j
+                break
+        
+        if not job:
+            return {'error': 'Job not found'}
+        
+        job['enabled'] = enabled
+        job['updatedAtMs'] = int(time.time() * 1000)
+        
+        with open('/root/.openclaw/cron/jobs.json', 'w') as f:
+            json.dump(data, f, indent=2)
+        
+        return {'success': True, 'enabled': enabled}
+    except Exception as e:
+        return {'error': str(e)}
+
+def run_cron_job(job_id):
+    """Trigger a cron job run"""
+    try:
+        result = subprocess.run(
+            ['openclaw', 'cron', 'run', job_id],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        
+        if result.returncode == 0:
+            return {'success': True, 'output': result.stdout.strip()}
+        else:
+            return {
+                'error': f'Command failed with exit code {result.returncode}',
+                'output': result.stdout,
+                'stderr': result.stderr
+            }
+    except subprocess.TimeoutExpired:
+        return {'error': 'Command timed out'}
+    except Exception as e:
+        return {'error': str(e)}
+
 def calculate_session_stats(sessions):
     """Calculate aggregate statistics for dashboard."""
     now = time.time() * 1000
@@ -913,6 +995,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
                 return
 
+        # Cron job toggle endpoint
+        if self.path == '/api/cron/toggle':
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length).decode()
+            try:
+                data = json.loads(body)
+                job_id = data.get('jobId', '')
+                enabled = data.get('enabled', True)
+                result = toggle_cron_job(job_id, enabled)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                return
+
+        # Cron job run endpoint
+        if self.path == '/api/cron/run':
+            content_length = int(self.headers['Content-Length'])
+            body = self.rfile.read(content_length).decode()
+            try:
+                data = json.loads(body)
+                job_id = data.get('jobId', '')
+                result = run_cron_job(job_id)
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                return
+
         super().do_POST()
     
     def do_GET(self):
@@ -1089,6 +1216,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             data = json.dumps(get_system_info())
             self._send_json_gzipped(data)
             return
+
+        # Cron jobs data endpoint
+        if self.path == '/data/cron-jobs.json':
+            data = json.dumps(get_cron_jobs())
+            self._send_json_gzipped(data)
+            return
+
+        # Cron runs data endpoint
+        if self.path.startswith('/data/cron-runs/'):
+            job_id = self.path.replace('/data/cron-runs/', '')
+            data = json.dumps(get_cron_runs(job_id))
+            self._send_json_gzipped(data)
+            return
         
         if self.path.startswith('/data/transcript/'):
             parsed_url = urlparse(self.path)
@@ -1216,7 +1356,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path.startswith('/data/sessions.json'):
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
-            since = int(params.get('since', [0])[0])
+            since = int(float(params.get('since', [0])[0]))
             
             # Check cache
             with _sessions_cache_lock:
