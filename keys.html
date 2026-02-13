@@ -131,6 +131,7 @@ details pre{font-size:8px;color:var(--ink-3);background:var(--hull);padding:4px;
     <span class="refresh-badge" id="lastRefresh">—</span>
     <button class="btn" onclick="refreshAll()">refresh</button>
     <button class="btn" onclick="testAllKeys()">test all</button>
+    <button class="btn" onclick="showAddKeyModal()" style="font-weight:bold">+</button>
     <a href="/" class="back-link">← sessions</a>
   </div>
 </div>
@@ -246,6 +247,7 @@ function keyCard(key, idx, isEnabled, totalEnabled) {
     ${testHtml}
     <div class="key-actions">
       <button class="key-test-btn" onclick="testKey('${esc(key.name)}')">test</button>
+      <button class="key-test-btn" onclick="deleteKey('${esc(key.name)}')" style="color:var(--led-red);border-color:var(--led-red)" title="Delete">×</button>
       ${isEnabled ? `<button class="key-move-btn" onclick="moveKey('${esc(key.name)}',-1)" ${idx===0?'disabled':''}>▲</button>
       <button class="key-move-btn" onclick="moveKey('${esc(key.name)}',1)" ${idx===totalEnabled-1?'disabled':''}>▼</button>` : ''}
       <div class="key-toggle ${isEnabled?'on':''}" onclick="toggleKey('${esc(key.name)}',${!isEnabled})"><div class="knob"></div></div>
@@ -487,6 +489,61 @@ function toast(type, title, msg) {
   setTimeout(() => t.classList.add('show'), 16);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 200); }, 5000);
 }
+
+async function deleteKey(name) {
+  if (!confirm(`Delete key "${name}"?`)) return;
+  try {
+    const r = await fetch('/api/keys/delete', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({profileName:name})});
+    const d = await r.json();
+    if (d.error) { toast('error','Error',d.error); return; }
+    toast('success','Deleted',name);
+    refreshAll();
+  } catch(e) { toast('error','Error',e.message); }
+}
+
+function showAddKeyModal() {
+  document.getElementById('addKeyModal').style.display = 'flex';
+}
+function hideAddKeyModal() {
+  document.getElementById('addKeyModal').style.display = 'none';
+}
+async function submitAddKey() {
+  const name = document.getElementById('akName').value.trim();
+  const provider = document.getElementById('akProvider').value;
+  const mode = document.getElementById('akMode').value || 'token';
+  const key = document.getElementById('akKey').value.trim();
+  if (!name || !key) { showToast('Name and key are required','error'); return; }
+  try {
+    const r = await fetch('/api/keys/add', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,provider,mode,key})});
+    const d = await r.json();
+    if (d.error) { toast('error','Error',d.error); return; }
+    toast('success','Added',name);
+    hideAddKeyModal();
+    document.getElementById('akName').value='';
+    document.getElementById('akKey').value='';
+    refreshAll();
+  } catch(e) { showToast(e.message,'error'); }
+}
 </script>
+
+<div id="addKeyModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)hideAddKeyModal()">
+  <div style="background:var(--panel);border:1px solid var(--shelf);border-radius:6px;padding:20px;width:360px;font-family:'JetBrains Mono',monospace">
+    <div style="color:var(--amber);font-size:13px;margin-bottom:14px;font-weight:600">+ ADD API KEY</div>
+    <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Name</label>
+    <input id="akName" placeholder="anthropic:my-key" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
+    <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Provider</label>
+    <select id="akProvider" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
+      <option value="anthropic">anthropic</option><option value="openai">openai</option><option value="google">google</option><option value="groq">groq</option><option value="openrouter">openrouter</option><option value="other">other</option>
+    </select>
+    <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Mode</label>
+    <input id="akMode" value="token" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
+    <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">API Key</label>
+    <input id="akKey" type="password" placeholder="sk-..." style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:16px">
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn" onclick="hideAddKeyModal()">cancel</button>
+      <button class="btn" onclick="submitAddKey()" style="background:var(--amber);color:var(--hull)">add</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
