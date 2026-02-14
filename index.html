@@ -836,6 +836,10 @@ body{
       <div class="toggle-knob"></div>
     </div>
   </div>
+  <div class="setting-row">
+    <div class="setting-label">Topic & Group Names</div>
+    <button class="btn" id="refreshTopicsBtn" onclick="refreshTopicNames()">refresh from telegram</button>
+  </div>
 </div>
 
 <div class="main-content">
@@ -963,6 +967,25 @@ function toggleSetting(key) {
 
 function toggleSettings() {
   document.getElementById('settingsPanel').classList.toggle('hidden');
+}
+
+async function refreshTopicNames() {
+  const btn = document.getElementById('refreshTopicsBtn');
+  btn.textContent = 'refreshing…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/refresh-topics', {method: 'POST'});
+    const d = await r.json();
+    if (d.topicNames) {
+      topicNamesMap = d.topicNames;
+      applyFiltersAndSort();
+      showToast('success', 'Topics', `Refreshed ${d.count} names`);
+    } else {
+      showToast('error', 'Error', d.error || 'Failed');
+    }
+  } catch(e) { showToast('error', 'Error', e.message); }
+  btn.textContent = 'refresh from telegram';
+  btn.disabled = false;
 }
 
 function initWebSocket() {

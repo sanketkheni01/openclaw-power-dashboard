@@ -1191,6 +1191,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(400)
                 self.end_headers()
                 return
+        if self.path == '/api/refresh-topics':
+            try:
+                _refresh_topic_names()
+                topics = load_topic_names()
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'status': 'ok', 'count': len(topics), 'topicNames': topics}).encode())
+                return
+            except Exception as e:
+                self.send_response(500)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                return
+
         if self.path == '/api/restart-gateway':
             try:
                 subprocess.Popen(['systemctl', 'restart', 'openclaw'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
