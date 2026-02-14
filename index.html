@@ -312,6 +312,7 @@ body{
 .badge-subagent{color:rgba(229,149,74,.7);border-color:rgba(229,149,74,.2);background:rgba(229,149,74,.05)}
 .badge-telegram{color:rgba(96,165,250,.7);border-color:rgba(96,165,250,.2);background:rgba(96,165,250,.05)}
 .badge-other{color:var(--ink-3);border-color:var(--wire);background:transparent}
+.group-pill{font-size:9px;padding:0px 4px;border-radius:2px;color:var(--ink-3);border:1px solid var(--wire);background:transparent;white-space:nowrap;max-width:80px;overflow:hidden;text-overflow:ellipsis}
 
 .model-pill{
   font-size:9px;padding:0px 4px;
@@ -1252,6 +1253,7 @@ function createSessionCard(session, index) {
   const inPercent = totalTokensCalc ? (tokensIn / totalTokensCalc) * 100 : 0;
   const outPercent = totalTokensCalc ? (tokensOut / totalTokensCalc) * 100 : 0;
   const model = getLastModel(session);
+  const groupName = getSessionGroup(session);
 
   const activity = session.activity || [];
   const activityHtml = activity.slice(0, 3).map(act => `
@@ -1291,6 +1293,7 @@ function createSessionCard(session, index) {
           <div class="card-name">${escapeHtml(name)}</div>
         </div>
         <div class="card-badges">
+          ${groupName ? `<div class="group-pill" title="${escapeHtml(groupName)}">${escapeHtml(groupName)}</div>` : ''}
           ${model ? `<div class="model-pill">${escapeHtml(model)}</div>` : ''}
           <div class="badge badge-${type}">${formatBadgeLabel(type)}</div>
           <button class="pin-btn ${isPinned ? 'pinned' : ''}" onclick="togglePin('${escapeHtml(session.key)}', event)">
@@ -1769,9 +1772,8 @@ function getSessionName(session) {
   if (topicMatch) {
     const topicId = topicMatch[1];
     const topicName = topicNamesMap[topicId];
-    const groupName = groupMatch ? (topicNamesMap['_group:' + groupMatch[1]] || session.subject) : session.subject;
-    if (topicName) return groupName ? `${groupName} › ${topicName}` : topicName;
-    return groupName ? `${groupName} #${topicId}` : `Topic ${topicId}`;
+    if (topicName) return topicName;
+    return `Topic ${topicId}`;
   }
   if (groupMatch) {
     const groupName = topicNamesMap['_group:' + groupMatch[1]];
@@ -1783,6 +1785,12 @@ function getSessionName(session) {
   const cronMatch = session.key.match(/cron:(.{8})/);
   if (cronMatch) return `Cron ${cronMatch[1]}`;
   return session.key.split(':').slice(-2).join(':');
+}
+
+function getSessionGroup(session) {
+  const groupMatch = session.key.match(/group:(-?\d+)/);
+  if (!groupMatch) return null;
+  return topicNamesMap['_group:' + groupMatch[1]] || session.subject || null;
 }
 
 function formatBadgeLabel(type) {
