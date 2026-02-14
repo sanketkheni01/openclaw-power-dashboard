@@ -7,6 +7,71 @@ import { fileURLToPath } from 'url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3847;
 
+// ── Telegram topic names auto-refresh ──
+let topicNamesMap = {};
+const TOPIC_NAMES_FILE = path.join(__dirname, 'topic-names.json');
+
+function loadTopicNamesFromDisk() {
+  try {
+    topicNamesMap = JSON.parse(fs.readFileSync(TOPIC_NAMES_FILE, 'utf-8'));
+  } catch { topicNamesMap = {}; }
+}
+
+function getBotToken() {
+  try {
+    const c = JSON.parse(fs.readFileSync('/root/.openclaw/openclaw.json', 'utf-8'));
+    return c.channels?.telegram?.botToken;
+  } catch { return null; }
+}
+
+function getForumChatIds() {
+  // Extract unique group chat IDs from sessions that have topics
+  try {
+    const raw = fs.readFileSync('/root/.openclaw/agents/main/sessions/sessions.json', 'utf-8');
+    const store = JSON.parse(raw);
+    const chatIds = new Set();
+    for (const key of Object.keys(store.sessions || store)) {
+      const m = key.match(/group:(-?\d+):topic:/);
+      if (m) chatIds.add(m[1]);
+    }
+    return [...chatIds];
+  } catch { return []; }
+}
+
+async function fetchTopicNames() {
+  const token = getBotToken();
+  if (!token) return;
+  const chatIds = getForumChatIds();
+  let changed = false;
+  for (const chatId of chatIds) {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/getForumTopicsByChat?chat_id=${chatId}`);
+      const data = await res.json();
+      if (data.ok && data.result) {
+        for (const topic of data.result) {
+          const name = topic.name;
+          const id = String(topic.message_thread_id);
+          if (topicNamesMap[id] !== name) {
+            topicNamesMap[id] = name;
+            changed = true;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Failed to fetch topics for ${chatId}:`, e.message);
+    }
+  }
+  if (changed) {
+    try { fs.writeFileSync(TOPIC_NAMES_FILE, JSON.stringify(topicNamesMap, null, 2)); } catch {}
+  }
+}
+
+// Load from disk immediately, then fetch from Telegram
+loadTopicNamesFromDisk();
+fetchTopicNames();
+// Refresh every 5 minutes
+setInterval(fetchTopicNames, 5 * 60 * 1000);
+
 // Read sessions directly from the sessions store
 function getSessions() {
   try {
@@ -17,7 +82,7 @@ function getSessions() {
       key,
       ...s
     }));
-    return JSON.stringify({ count: sessions.length, sessions });
+    return JSON.stringify({ count: sessions.length, sessions, topicNames: topicNamesMap });
   } catch(e) {
     return JSON.stringify({ count: 0, sessions: [], error: e.message });
   }

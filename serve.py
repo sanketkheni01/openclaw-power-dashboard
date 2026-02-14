@@ -243,6 +243,141 @@ def load_topic_names():
             return json.load(f)
     except:
         return {}
+
+def _get_bot_token():
+    try:
+        with open('/root/.openclaw/openclaw.json') as f:
+            cfg = json.load(f)
+        return cfg.get('channels', {}).get('telegram', {}).get('botToken')
+    except:
+        return None
+
+def _get_forum_chat_ids():
+    """Extract unique group chat IDs from sessions that have topics."""
+    try:
+        with open(SESSIONS_FILE) as f:
+            store = json.load(f)
+        ids = set()
+        for key in store:
+            import re
+            m = re.search(r'group:(-?\d+):topic:', key)
+            if m:
+                ids.add(m.group(1))
+        return list(ids)
+    except:
+        return []
+
+def _refresh_topic_names():
+    """Refresh topic names and group names from Telegram Bot API.
+    
+    Since Telegram Bot API has no 'list all topics' method, we:
+    1. Update group chat titles via getChat
+    2. Scan recent transcript files for forum_topic_created events to discover topic names
+    3. Save everything to topic-names.json
+    """
+    token = _get_bot_token()
+    if not token:
+        return
+    
+    current = load_topic_names()
+    changed = False
+    
+    # 1. Get all unique chat IDs from sessions (groups with topics)
+    try:
+        raw = json.load(open(SESSIONS_FILE))
+        chat_topic_pairs = {}  # chatId -> set of topicIds
+        group_names = {}  # chatId -> group title (from sessions)
+        
+        for key in raw:
+            import re
+            m = re.search(r'group:(-?\d+)(?::topic:(\d+))?', key)
+            if m:
+                cid = m.group(1)
+                tid = m.group(2)
+                if tid:
+                    chat_topic_pairs.setdefault(cid, set()).add(tid)
+                # Also update group name from getChat
+                if cid not in group_names:
+                    group_names[cid] = None
+        
+        # 2. Fetch group titles via getChat
+        for cid in group_names:
+            try:
+                url = f'https://api.telegram.org/bot{token}/getChat?chat_id={cid}'
+                resp = urllib.request.urlopen(urllib.request.Request(url), timeout=10)
+                data = json.loads(resp.read())
+                if data.get('ok') and data['result'].get('title'):
+                    group_key = f'_group:{cid}'
+                    title = data['result']['title']
+                    if current.get(group_key) != title:
+                        current[group_key] = title
+                        changed = True
+            except:
+                pass
+        
+        # 3. Scan recent transcripts for forum_topic_created service messages
+        # Look at the last few user messages for each topic session
+        for cid, topic_ids in chat_topic_pairs.items():
+            for tid in topic_ids:
+                if tid in current:
+                    continue  # Already known
+                # Check session transcript for topic name
+                session_key = None
+                for key, val in raw.items():
+                    if f'group:{cid}:topic:{tid}' in key:
+                        session_key = key
+                        break
+                if not session_key:
+                    continue
+                sid = raw[session_key].get('sessionId', '')
+                if not sid:
+                    continue
+                fpath = os.path.join(TRANSCRIPTS_DIR, f'{sid}.jsonl')
+                if not os.path.exists(fpath):
+                    continue
+                try:
+                    with open(fpath) as f:
+                        for i, line in enumerate(f):
+                            if i > 30:
+                                break
+                            if 'forum_topic' in line or 'is_forum' in line:
+                                entry = json.loads(line)
+                                # Look for forum_topic_created in message content
+                                msg = entry.get('message', {})
+                                content = msg.get('content', '')
+                                if isinstance(content, list):
+                                    for c in content:
+                                        text = c.get('text', '') if isinstance(c, dict) else ''
+                                        if 'forum_topic' in text:
+                                            fm = re.search(r'"name"\s*:\s*"([^"]+)"', text)
+                                            if fm:
+                                                current[tid] = fm.group(1)
+                                                changed = True
+                except:
+                    pass
+    except:
+        pass
+    
+    if changed:
+        try:
+            with open(TOPIC_NAMES_FILE, 'w') as f:
+                json.dump(current, f, indent=2)
+        except:
+            pass
+
+def _topic_refresh_loop():
+    """Background thread: refresh topic names every 5 minutes."""
+    while True:
+        try:
+            _refresh_topic_names()
+        except:
+            pass
+        time.sleep(300)
+
+# Start topic name refresh thread
+_topic_thread = threading.Thread(target=_topic_refresh_loop, daemon=True)
+_topic_thread.start()
+
 TRANSCRIPTS_DIR = '/root/.openclaw/agents/main/sessions/'
 PINNED_FILE = os.path.join(DIR, 'pinned.json')
 
