@@ -1765,11 +1765,17 @@ let topicNamesMap = {};
 function getSessionName(session) {
   if (session.label) return session.label;
   const topicMatch = session.key.match(/topic:(\d+)/);
+  const groupMatch = session.key.match(/group:(-?\d+)/);
   if (topicMatch) {
     const topicId = topicMatch[1];
     const topicName = topicNamesMap[topicId];
-    if (topicName) return topicName;
-    return session.subject ? `${session.subject} #${topicId}` : `Topic ${topicId}`;
+    const groupName = groupMatch ? (topicNamesMap['_group:' + groupMatch[1]] || session.subject) : session.subject;
+    if (topicName) return groupName ? `${groupName} › ${topicName}` : topicName;
+    return groupName ? `${groupName} #${topicId}` : `Topic ${topicId}`;
+  }
+  if (groupMatch) {
+    const groupName = topicNamesMap['_group:' + groupMatch[1]];
+    if (groupName) return groupName;
   }
   if (session.subject) return session.subject;
   if (session.displayName) return session.displayName.replace('telegram:', '').replace('g-', 'Group ');
