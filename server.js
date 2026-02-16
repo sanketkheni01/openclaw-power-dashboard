@@ -1,26 +1,11 @@
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { execSync } from 'child_process';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = 3847;
-
-// ── Auth ──
-const DASHBOARD_PASSWORD = fs.readFileSync(path.join(__dirname, '.dashboard-secret'), 'utf-8').trim();
-// HMAC token = hash of password (sent by client after login, validated server-side)
-function makeToken(pw) {
-  return crypto.createHmac('sha256', 'cozy-dashboard-salt').update(pw).digest('hex');
-}
-const VALID_TOKEN = makeToken(DASHBOARD_PASSWORD);
-
-function isAuthenticated(req) {
-  const url = new URL(req.url, `http://localhost:${PORT}`);
-  const token = url.searchParams.get('token') || req.headers['x-dashboard-token'];
-  return token === VALID_TOKEN;
-}
 
 // ── Telegram topic names auto-refresh ──
 let topicNamesMap = {};
@@ -178,87 +163,17 @@ function runCronJob(jobId) {
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
 
-// Login page HTML
-const LOGIN_HTML = `<!DOCTYPE html>
-<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Dashboard Login</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'JetBrains Mono',monospace;background:#0a0c10;color:#e2e4e9;display:flex;align-items:center;justify-content:center;min-height:100vh}
-.login{background:#0e1117;border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:40px;width:340px}
-h1{font-size:16px;margin-bottom:24px;color:#e5954a}
-input{width:100%;padding:10px 12px;background:#141820;border:1px solid rgba(255,255,255,.09);border-radius:3px;color:#e2e4e9;font-family:inherit;font-size:13px;margin-bottom:16px;outline:none}
-input:focus{border-color:rgba(229,149,74,.4)}
-button{width:100%;padding:10px;background:#e5954a;color:#0a0c10;border:none;border-radius:3px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
-button:hover{opacity:.9}
-.err{color:#f87171;font-size:11px;margin-bottom:12px;display:none}
-</style></head><body>
-<div class="login"><h1>🔒 Dashboard</h1>
-<div class="err" id="err">Wrong password</div>
-<form id="f"><input type="password" id="pw" placeholder="Password" autofocus>
-<button type="submit">Login</button></form>
-</div>
-<script>
-document.getElementById('f').onsubmit=async e=>{
-  e.preventDefault();
-  const pw=document.getElementById('pw').value;
-  const res=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
-  const d=await res.json();
-  if(d.token){localStorage.setItem('dashboard-token',d.token);window.location.href='/';}
-  else{document.getElementById('err').style.display='block';}
-};
-// If already logged in, redirect
-if(localStorage.getItem('dashboard-token'))window.location.href='/';
-</script></body></html>`;
-
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://localhost:${PORT}`);
   
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Dashboard-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
-    return;
-  }
-  
-  // Login page (always accessible)
-  if (url.pathname === '/login') {
-    res.writeHead(200, { 'Content-Type': 'text/html' });
-    res.end(LOGIN_HTML);
-    return;
-  }
-  
-  // Auth endpoint (always accessible)
-  if (url.pathname === '/api/auth' && req.method === 'POST') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        const { password } = JSON.parse(body);
-        if (password === DASHBOARD_PASSWORD) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ token: VALID_TOKEN }));
-        } else {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Invalid password' }));
-        }
-      } catch(e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Invalid request' }));
-      }
-    });
-    return;
-  }
-  
-  // All other routes require auth
-  if (!isAuthenticated(req)) {
-    res.writeHead(401, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Unauthorized' }));
     return;
   }
   
