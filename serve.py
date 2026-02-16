@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import http.server, json, os, socketserver, glob, time, threading, asyncio, websockets, urllib.request, urllib.error, gzip, hashlib, secrets, base64
+import http.server, json, os, socketserver, glob, time, threading, asyncio, websockets, urllib.request, urllib.error, gzip, hashlib, secrets, base64, hmac
 from datetime import datetime, timedelta
 from urllib.parse import urlparse, parse_qs, urlencode
 import subprocess
@@ -9,6 +9,64 @@ from watchdog.events import FileSystemEventHandler
 PORT = 3847
 WS_PORT = 3848
 DIR = os.path.dirname(os.path.abspath(__file__))
+
+# ── Auth ──
+_SECRET_FILE = os.path.join(DIR, '.dashboard-secret')
+with open(_SECRET_FILE) as _f:
+    _DASHBOARD_PASSWORD = _f.read().strip()
+_AUTH_TOKEN = hmac.new(_DASHBOARD_PASSWORD.encode(), b'dashboard-auth', hashlib.sha256).hexdigest()
+
+def _is_authenticated(handler):
+    """Check token in query param or cookie."""
+    parsed = urlparse(handler.path)
+    params = parse_qs(parsed.query)
+    if params.get('token', [None])[0] == _AUTH_TOKEN:
+        return True
+    cookie = handler.headers.get('Cookie', '')
+    for part in cookie.split(';'):
+        part = part.strip()
+        if part.startswith('dashboard_token=') and part.split('=', 1)[1] == _AUTH_TOKEN:
+            return True
+    return False
+
+_LOGIN_HTML = '''<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dashboard Login</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;background:#0a0a0f;color:#e0e0e0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.card{background:#14141f;border:1px solid #2a2a3a;border-radius:12px;padding:2rem;width:340px;text-align:center}
+h2{margin-bottom:1.5rem;font-size:1.3rem;color:#fff}
+input{width:100%;padding:.75rem 1rem;border:1px solid #2a2a3a;border-radius:8px;background:#1a1a2a;color:#fff;font-size:1rem;margin-bottom:1rem;outline:none}
+input:focus{border-color:#6366f1}
+button{width:100%;padding:.75rem;border:none;border-radius:8px;background:#6366f1;color:#fff;font-size:1rem;cursor:pointer;font-weight:600}
+button:hover{background:#5558e6}
+.err{color:#f87171;font-size:.85rem;margin-top:.5rem;display:none}
+</style></head><body>
+<div class="card">
+<h2>🔒 Dashboard</h2>
+<form id="f">
+<input type="password" id="pw" placeholder="Password" autofocus>
+<button type="submit">Login</button>
+<div class="err" id="err">Wrong password</div>
+</form>
+</div>
+<script>
+document.getElementById('f').onsubmit=async e=>{
+e.preventDefault();
+const pw=document.getElementById('pw').value;
+const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
+const d=await r.json();
+if(d.token){
+localStorage.setItem('dashboard_token',d.token);
+document.cookie='dashboard_token='+d.token+';path=/;max-age=31536000;SameSite=Lax';
+location.href='/';
+}else{
+document.getElementById('err').style.display='block';
+document.getElementById('pw').value='';
+}
+};
+</script></body></html>'''
 SESSIONS_FILE = '/root/.openclaw/agents/main/sessions/sessions.json'
 TOPIC_NAMES_FILE = os.path.join(DIR, 'topic-names.json')
 
@@ -841,8 +899,49 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=DIR, **kw)
     
+    def _require_auth(self):
+        """Return True if request is authenticated or is an auth endpoint. Send 401/login redirect if not."""
+        path = urlparse(self.path).path
+        # Allow login page and auth endpoint without auth
+        if path in ('/login', '/api/auth'):
+            return True
+        if _is_authenticated(self):
+            return True
+        # For API/data requests, return 401 JSON
+        if path.startswith('/api/') or path.startswith('/data/'):
+            self.send_response(401)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(b'{"error":"unauthorized"}')
+            return False
+        # For HTML pages, redirect to login
+        self.send_response(302)
+        self.send_header('Location', '/login')
+        self.end_headers()
+        return False
+    
     def do_POST(self):
         content_type = self.headers.get('Content-Type', '')
+
+        # Auth endpoint (no auth required)
+        if self.path == '/api/auth':
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            pw = body.get('password', '')
+            if pw == _DASHBOARD_PASSWORD:
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({'token': _AUTH_TOKEN}).encode())
+            else:
+                self.send_response(403)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error":"wrong password"}')
+            return
+
+        if not self._require_auth():
+            return
 
         if self.path == '/api/keys/add':
             cl = int(self.headers.get('Content-Length', 0))
@@ -1318,6 +1417,19 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_POST()
     
     def do_GET(self):
+        # Login page (no auth required)
+        parsed_path = urlparse(self.path).path
+        if parsed_path == '/login':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.send_header('Cache-Control', 'no-store')
+            self.end_headers()
+            self.wfile.write(_LOGIN_HTML.encode())
+            return
+
+        if not self._require_auth():
+            return
+
         if self.path.startswith('/session/'):
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
