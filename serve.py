@@ -58,7 +58,7 @@ const pw=document.getElementById('pw').value;
 const r=await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});
 const d=await r.json();
 if(d.token){
-try{localStorage.setItem('dashboard_token',d.token)}catch(e){}
+localStorage.setItem('dashboard_token',d.token);
 document.cookie='dashboard_token='+d.token+';path=/;max-age=31536000;SameSite=Lax';
 location.href='/';
 }else{
@@ -931,7 +931,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             if pw == _DASHBOARD_PASSWORD:
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
-                self.send_header('Set-Cookie', f'dashboard_token={_AUTH_TOKEN}; Path=/; Max-Age=31536000; SameSite=Lax')
                 self.end_headers()
                 self.wfile.write(json.dumps({'token': _AUTH_TOKEN}).encode())
             else:
@@ -1430,21 +1429,6 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if not self._require_auth():
             return
-
-        # For HTML pages, add no-cache headers
-        parsed_path = urlparse(self.path).path
-        if parsed_path in ('/', '') or parsed_path.endswith('.html'):
-            filepath = os.path.join(DIR, 'index.html' if parsed_path in ('/', '') else parsed_path.lstrip('/'))
-            if os.path.isfile(filepath):
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html')
-                self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-                self.send_header('Pragma', 'no-cache')
-                self.send_header('Expires', '0')
-                self.end_headers()
-                with open(filepath, 'rb') as f:
-                    self.wfile.write(f.read())
-                return
 
         if self.path.startswith('/session/'):
             self.send_response(200)
