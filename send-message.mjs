@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 const { callGateway } = await import("/root/openclaw/src/gateway/call.js");
 const { randomUUID } = await import("node:crypto");
 
@@ -7,12 +8,20 @@ if (!sessionKey || !message) {
   process.exit(1);
 }
 
+// Load gateway token from config
+let token;
+try {
+  const config = JSON.parse(readFileSync("/root/.openclaw/openclaw.json", "utf8"));
+  token = config?.gateway?.auth?.token;
+} catch {}
+
 try {
   await callGateway({
     method: "chat.send",
     params: { sessionKey, message, idempotencyKey: randomUUID() },
     expectFinal: true,
     timeoutMs: 120000,
+    ...(token ? { token } : {}),
   });
   process.stdout.write(JSON.stringify({ status: "sent" }));
 } catch (e) {

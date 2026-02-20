@@ -237,6 +237,91 @@ def get_system_info():
         info['error'] = str(e)
     return info
 
+def _get_gateway_token():
+    try:
+        with open('/root/.openclaw/openclaw.json') as f:
+            cfg = json.load(f)
+        return cfg.get('gateway', {}).get('auth', {}).get('token')
+    except:
+        return None
+
+def _get_gateway_port():
+    try:
+        with open('/root/.openclaw/openclaw.json') as f:
+            cfg = json.load(f)
+        return cfg.get('gateway', {}).get('port', 18789)
+    except:
+        return 18789
+
+async def _gateway_send_message(session_key: str, message: str) -> dict:
+    """Send a message to a session via the OpenClaw gateway WebSocket."""
+    import uuid as _uuid
+    token = _get_gateway_token()
+    port = _get_gateway_port()
+    if not token:
+        return {'error': 'gateway token not found'}
+    uri = f'ws://127.0.0.1:{port}'
+    try:
+        async with websockets.connect(
+            uri,
+            additional_headers={'Origin': f'http://127.0.0.1:{port}'},
+            open_timeout=5
+        ) as ws:
+            # Receive challenge
+            await asyncio.wait_for(ws.recv(), timeout=5.0)
+            # Connect as control-ui (bypasses device pairing with allowInsecureAuth=true)
+            await ws.send(json.dumps({
+                'type': 'req', 'id': '1', 'method': 'connect',
+                'params': {
+                    'minProtocol': 3, 'maxProtocol': 3,
+                    'client': {'id': 'openclaw-control-ui', 'mode': 'ui', 'version': '1.0', 'platform': 'linux'},
+                    'scopes': ['operator.admin', 'operator.write'],
+                    'auth': {'token': token}
+                }
+            }))
+            hello = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+            if not hello.get('ok'):
+                return {'error': f"gateway connect failed: {hello.get('error', {}).get('message', 'unknown')}"}
+            # Drain any immediate events
+            try:
+                while True:
+                    await asyncio.wait_for(ws.recv(), timeout=0.3)
+            except asyncio.TimeoutError:
+                pass
+            # Send chat.send
+            await ws.send(json.dumps({
+                'type': 'req', 'id': '2', 'method': 'chat.send',
+                'params': {
+                    'sessionKey': session_key,
+                    'message': message,
+                    'idempotencyKey': str(_uuid.uuid4())
+                }
+            }))
+            # Wait for response
+            for _ in range(30):
+                try:
+                    msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+                    if msg.get('type') == 'res' and msg.get('id') == '2':
+                        if msg.get('ok'):
+                            return {'status': 'sent', 'runId': msg.get('payload', {}).get('runId')}
+                        else:
+                            return {'error': msg.get('error', {}).get('message', 'send failed')}
+                except asyncio.TimeoutError:
+                    return {'error': 'timeout waiting for gateway response'}
+            return {'error': 'no response from gateway'}
+    except Exception as e:
+        return {'error': str(e)}
+
+def gateway_send_message_sync(session_key: str, message: str) -> dict:
+    """Synchronous wrapper for _gateway_send_message."""
+    try:
+        loop = asyncio.new_event_loop()
+        result = loop.run_until_complete(_gateway_send_message(session_key, message))
+        loop.close()
+        return result
+    except Exception as e:
+        return {'error': str(e)}
+
 def load_topic_names():
     try:
         with open(TOPIC_NAMES_FILE) as f:
@@ -1252,16 +1337,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     self.end_headers()
                     self.wfile.write(b'{"error":"Session key not found"}')
                     return
-                # Fire-and-forget via gateway API (faster than CLI)
-                subprocess.Popen(
-                    ['node', '--import', 'tsx', '/root/.openclaw/workspace/dashboard/send-message.mjs', session_key, message],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                    cwd='/root/openclaw'
-                )
+                # Send message via gateway WebSocket
+                result = gateway_send_message_sync(session_key, message)
+                if 'error' in result:
+                    self.send_response(500)
+                    self.send_header('Content-Type', 'application/json')
+                    self.end_headers()
+                    self.wfile.write(json.dumps({'error': result['error']}).encode())
+                    return
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
-                self.wfile.write(b'{"status":"sent"}')
+                self.wfile.write(json.dumps({'status': 'sent'}).encode())
                 return
             except Exception as e:
                 self.send_response(500)
