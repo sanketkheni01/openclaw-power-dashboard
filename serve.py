@@ -237,6 +237,70 @@ def get_system_info():
         info['error'] = str(e)
     return info
 
+def _get_groq_api_key():
+    try:
+        with open('/root/.openclaw/openclaw.json') as f:
+            cfg = json.load(f)
+        return cfg.get('env', {}).get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY')
+    except:
+        return os.environ.get('GROQ_API_KEY')
+
+def transcribe_audio(audio_bytes: bytes, mime_type: str = 'audio/webm') -> dict:
+    """Transcribe audio using Groq Whisper API."""
+    import io, email.generator, email.mime.multipart, email.mime.base, email.encoders
+    api_key = _get_groq_api_key()
+    if not api_key:
+        return {'error': 'GROQ_API_KEY not configured'}
+    
+    # Determine file extension from mime type
+    ext_map = {
+        'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4',
+        'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/flac': 'flac',
+        'audio/m4a': 'm4a', 'audio/x-m4a': 'm4a',
+    }
+    ext = ext_map.get(mime_type.split(';')[0].strip(), 'webm')
+    filename = f'audio.{ext}'
+    
+    # Build multipart form data manually
+    boundary = f'----FormBoundary{secrets.token_hex(16)}'
+    body_parts = []
+    # model field
+    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-large-v3-turbo\r\n')
+    # response_format field
+    body_parts.append(f'--{boundary}\r\nContent-Disposition: form-data; name="response_format"\r\n\r\njson\r\n')
+    # file field
+    file_header = f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\nContent-Type: {mime_type}\r\n\r\n'
+    body_end = f'\r\n--{boundary}--\r\n'
+    
+    full_body = file_header.encode() + audio_bytes + body_end.encode()
+    for part in body_parts:
+        full_body = part.encode() + full_body
+    
+    try:
+        req = urllib.request.Request(
+            'https://api.groq.com/openai/v1/audio/transcriptions',
+            data=full_body,
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': f'multipart/form-data; boundary={boundary}',
+                'User-Agent': 'OpenClaw-Dashboard/1.0',
+            },
+            method='POST'
+        )
+        resp = urllib.request.urlopen(req, timeout=30)
+        data = json.loads(resp.read())
+        text = data.get('text', '').strip()
+        return {'text': text} if text else {'error': 'empty transcription'}
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode('utf-8', errors='replace')
+        try:
+            err_data = json.loads(err_body)
+            return {'error': err_data.get('error', {}).get('message', err_body[:200])}
+        except:
+            return {'error': f'HTTP {e.code}: {err_body[:200]}'}
+    except Exception as e:
+        return {'error': str(e)}
+
 def _get_gateway_token():
     try:
         with open('/root/.openclaw/openclaw.json') as f:
@@ -1307,6 +1371,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
                 return
         
+        if self.path == '/api/transcribe':
+            content_length = int(self.headers.get('Content-Length', 0))
+            if not content_length:
+                self.send_response(400)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(b'{"error":"no audio data"}')
+                return
+            audio_bytes = self.rfile.read(content_length)
+            mime_type = self.headers.get('X-Audio-Mime', 'audio/webm')
+            result = transcribe_audio(audio_bytes, mime_type)
+            self.send_response(200 if 'text' in result else 500)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(result).encode())
+            return
+
         if self.path == '/api/send-message':
             content_length = int(self.headers['Content-Length'])
             body = self.rfile.read(content_length).decode()
@@ -1846,7 +1927,7 @@ if __name__ == "__main__":
     ws_thread.start()
     
     try:
-        with ReuseServer(('0.0.0.0', PORT), Handler) as s:
+        with ReuseServer(('127.0.0.1', PORT), Handler) as s:
             print(f'Dashboard: http://localhost:{PORT}')
             print(f'WebSocket: ws://localhost:{WS_PORT}')
             s.serve_forever()

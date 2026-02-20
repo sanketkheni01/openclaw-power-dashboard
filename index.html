@@ -422,6 +422,12 @@ body{
 .send-btn{padding:5px 10px !important;background:var(--amber) !important;color:var(--hull) !important;border-color:var(--amber) !important;border-radius:var(--radius) !important;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .send-btn:hover{opacity:.85}
 .send-btn:disabled{opacity:.4;cursor:not-allowed}
+.mic-btn{padding:5px 8px !important;background:var(--shelf) !important;color:var(--ink-2) !important;border:1px solid var(--wire) !important;border-radius:var(--radius) !important;display:flex;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;transition:all .15s;user-select:none;-webkit-user-select:none}
+.mic-btn:hover{border-color:var(--wire-mid) !important;color:var(--ink) !important}
+.mic-btn.recording{background:rgba(248,113,113,.15) !important;border-color:var(--led-red) !important;color:var(--led-red) !important;animation:mic-pulse 1s infinite}
+.mic-btn.transcribing{background:rgba(229,149,74,.1) !important;border-color:var(--amber) !important;color:var(--amber) !important}
+.mic-btn:disabled{opacity:.4;cursor:not-allowed}
+@keyframes mic-pulse{0%,100%{box-shadow:0 0 0 0 rgba(248,113,113,.4)}50%{box-shadow:0 0 0 4px rgba(248,113,113,0)}}
 
 .log-entry{margin:8px 0;padding-left:10px;border-left:2px solid var(--wire)}
 .log-entry.role-user{border-color:rgba(96,165,250,.4)}
@@ -881,6 +887,11 @@ body{
     <div class="send-bar" id="sendBar">
       <input type="text" id="sendInput" placeholder="send message to session…" autocomplete="off"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSessionMessage()}" />
+      <button class="btn mic-btn" id="micBtn" title="Hold to record voice"
+        onmousedown="startRecording(event)" onmouseup="stopRecording(event)" onmouseleave="stopRecording(event)"
+        ontouchstart="startRecording(event)" ontouchend="stopRecording(event)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+      </button>
       <button class="btn send-btn" id="sendBtn" onclick="sendSessionMessage()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
       </button>
@@ -1725,6 +1736,89 @@ async function sendSessionMessage() {
     input.focus();
   }
 }
+
+// ── Voice recording ──────────────────────────────────────────────
+let _mediaRecorder = null;
+let _audioChunks = [];
+let _recordingActive = false;
+
+async function startRecording(e) {
+  e.preventDefault();
+  if (_recordingActive) return;
+  const micBtn = document.getElementById('micBtn');
+  
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    _audioChunks = [];
+    _recordingActive = true;
+    
+    // Pick best supported format
+    const mimeType = ['audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus','audio/mp4']
+      .find(t => MediaRecorder.isTypeSupported(t)) || '';
+    
+    _mediaRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+    _mediaRecorder.ondataavailable = ev => { if (ev.data.size > 0) _audioChunks.push(ev.data); };
+    _mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      await _transcribeChunks(_mediaRecorder.mimeType || 'audio/webm');
+    };
+    _mediaRecorder.start(100);
+    micBtn.classList.add('recording');
+    micBtn.title = 'Release to transcribe';
+  } catch (err) {
+    showToast('error', 'Mic Error', err.message || 'Could not access microphone');
+    _recordingActive = false;
+  }
+}
+
+function stopRecording(e) {
+  e.preventDefault();
+  if (!_recordingActive || !_mediaRecorder) return;
+  _recordingActive = false;
+  const micBtn = document.getElementById('micBtn');
+  micBtn.classList.remove('recording');
+  micBtn.classList.add('transcribing');
+  micBtn.disabled = true;
+  micBtn.title = 'Transcribing…';
+  _mediaRecorder.stop();
+}
+
+async function _transcribeChunks(mimeType) {
+  const micBtn = document.getElementById('micBtn');
+  const input = document.getElementById('sendInput');
+  try {
+    const blob = new Blob(_audioChunks, { type: mimeType });
+    if (blob.size < 1000) {
+      showToast('error', 'Too short', 'Recording too short to transcribe');
+      return;
+    }
+    const res = await fetch('/api/transcribe', {
+      method: 'POST',
+      headers: {
+        'Content-Type': mimeType,
+        'X-Audio-Mime': mimeType.split(';')[0],
+      },
+      body: blob,
+    });
+    const data = await res.json();
+    if (data.text) {
+      input.value = (input.value ? input.value + ' ' : '') + data.text;
+      input.focus();
+      // Move cursor to end
+      input.selectionStart = input.selectionEnd = input.value.length;
+    } else {
+      showToast('error', 'Transcribe Failed', data.error || 'No text returned');
+    }
+  } catch (err) {
+    showToast('error', 'Transcribe Error', err.message);
+  } finally {
+    micBtn.classList.remove('transcribing');
+    micBtn.disabled = false;
+    micBtn.title = 'Hold to record voice';
+    _audioChunks = [];
+  }
+}
+// ─────────────────────────────────────────────────────────────────
 
 function showToast(type, title, message) {
   if (!settings.toast) return;
