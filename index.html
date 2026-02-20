@@ -1802,10 +1802,8 @@ async function _transcribeChunks(mimeType) {
     });
     const data = await res.json();
     if (data.text) {
-      input.value = (input.value ? input.value + ' ' : '') + data.text;
-      input.focus();
-      // Move cursor to end
-      input.selectionStart = input.selectionEnd = input.value.length;
+      input.value = data.text;
+      await sendSessionMessage();
     } else {
       showToast('error', 'Transcribe Failed', data.error || 'No text returned');
     }
