@@ -888,7 +888,7 @@ body{
       <input type="text" id="sendInput" placeholder="send message to session…" autocomplete="off"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSessionMessage()}" />
       <button class="btn mic-btn" id="micBtn" title="Hold to record voice"
-        onmousedown="startRecording(event)" onmouseup="stopRecording(event)" onmouseleave="stopRecording(event)"
+        onmousedown="startRecording(event)" onmouseup="stopRecording(event)"
         ontouchstart="startRecording(event)" ontouchend="stopRecording(event)">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="11" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
       </button>
@@ -1741,6 +1741,10 @@ async function sendSessionMessage() {
 let _mediaRecorder = null;
 let _audioChunks = [];
 let _recordingActive = false;
+
+// Stop recording on mouseup anywhere on the page (in case cursor drifts off button)
+document.addEventListener('mouseup', (e) => { if (_recordingActive) stopRecording(e); });
+document.addEventListener('touchend', (e) => { if (_recordingActive) stopRecording(e); });
 
 async function startRecording(e) {
   e.preventDefault();
