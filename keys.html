@@ -119,6 +119,26 @@ details pre{font-size:8px;color:var(--ink-3);background:var(--hull);padding:4px;
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .pulse{animation:pulse 2s infinite}
+
+/* Anthropic Key Card */
+.anthropic-key-card{background:var(--shelf);border:1px solid rgba(229,149,74,.2);border-radius:var(--radius);padding:12px 14px}
+.ak-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.ak-info{flex:1}
+.ak-label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
+.ak-value{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:1px;font-variant-numeric:tabular-nums}
+.ak-meta{font-size:9px;color:var(--ink-4);margin-top:2px}
+.ak-actions{display:flex;gap:4px}
+.ak-edit-form{margin-top:10px;padding-top:10px;border-top:1px solid var(--wire)}
+.ak-edit-form label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px}
+.ak-input-row{display:flex;gap:4px;margin-bottom:8px}
+.ak-input-row input{flex:1;padding:6px 8px;background:var(--hull);border:1px solid var(--wire);border-radius:var(--radius);color:var(--ink);font-size:12px;font-family:var(--mono)}
+.ak-input-row input:focus{outline:none;border-color:var(--amber)}
+.ak-input-row input::placeholder{color:var(--ink-4)}
+.ak-btn-row{display:flex;gap:4px}
+.ak-status{margin-top:8px;font-size:10px;padding:4px 8px;border-radius:var(--radius);display:none}
+.ak-status.success{display:block;background:rgba(74,222,128,.08);color:var(--led-green);border:1px solid rgba(74,222,128,.2)}
+.ak-status.error{display:block;background:rgba(248,113,113,.08);color:var(--led-red);border:1px solid rgba(248,113,113,.2)}
+.ak-status.loading{display:block;background:rgba(229,149,74,.08);color:var(--amber);border:1px solid rgba(229,149,74,.2)}
 </style>
 </head>
 <body>
@@ -138,7 +158,33 @@ details pre{font-size:8px;color:var(--ink-3);background:var(--hull);padding:4px;
 
 <div class="container">
   <div class="section" id="keysSection">
-    <div class="section-title">openclaw api keys <span class="count" id="keysCount"></span></div>
+    <div class="section-title">anthropic api key <span class="count" style="color:var(--amber)">(primary)</span></div>
+    <div id="anthropicKeyCard" class="anthropic-key-card">
+      <div class="ak-row">
+        <div class="ak-info">
+          <div class="ak-label">Current Key</div>
+          <div class="ak-value" id="akMasked">loading…</div>
+          <div class="ak-meta" id="akMeta"></div>
+        </div>
+        <div class="ak-actions">
+          <button class="btn" id="akEditBtn" onclick="toggleAkEdit()">change key</button>
+        </div>
+      </div>
+      <div id="akEditForm" style="display:none" class="ak-edit-form">
+        <label>New Anthropic API Key</label>
+        <div class="ak-input-row">
+          <input type="password" id="akNewKey" placeholder="sk-ant•••" autocomplete="off" spellcheck="false">
+          <button class="btn" id="akToggleVis" onclick="toggleAkVis()" title="Show/hide">👁</button>
+        </div>
+        <div class="ak-btn-row">
+          <button class="btn primary" id="akSaveBtn" onclick="saveAnthropicKey()">validate & save</button>
+          <button class="btn" onclick="toggleAkEdit()">cancel</button>
+        </div>
+        <div id="akStatus" class="ak-status"></div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:12px">all api keys <span class="count" id="keysCount"></span></div>
     <div class="summary" id="keysSummary"></div>
     <div id="keysList"></div>
   </div>
@@ -155,7 +201,7 @@ let keysData = [], keysUsage = {}, keysTestResults = {}, oauthAccounts = {};
 let oauthPending = null, editingAccount = null, allKeyProfiles = [];
 let refreshTimer = null;
 
-document.addEventListener('DOMContentLoaded', () => { refreshAll(); startAutoRefresh(); });
+document.addEventListener('DOMContentLoaded', () => { refreshAll(); loadAnthropicKey(); startAutoRefresh(); });
 
 function startAutoRefresh() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -523,6 +569,90 @@ async function submitAddKey() {
     document.getElementById('akKey').value='';
     refreshAll();
   } catch(e) { showToast(e.message,'error'); }
+}
+
+// ── Anthropic Key Management ──
+async function loadAnthropicKey() {
+  try {
+    const r = await fetch('/api/settings/anthropic-key?t=' + Date.now());
+    const d = await r.json();
+    document.getElementById('akMasked').textContent = d.masked || 'not set';
+    const meta = [];
+    if (d.type === 'oauth') meta.push('oauth token');
+    else if (d.type === 'api-key') meta.push('api key');
+    if (d.hasKey) meta.push('active');
+    else meta.push('not configured');
+    document.getElementById('akMeta').textContent = meta.join(' · ');
+  } catch(e) {
+    document.getElementById('akMasked').textContent = 'error loading';
+    document.getElementById('akMeta').textContent = e.message;
+  }
+}
+
+function toggleAkEdit() {
+  const form = document.getElementById('akEditForm');
+  const isHidden = form.style.display === 'none';
+  form.style.display = isHidden ? 'block' : 'none';
+  document.getElementById('akEditBtn').textContent = isHidden ? 'cancel' : 'change key';
+  if (isHidden) {
+    document.getElementById('akNewKey').value = '';
+    document.getElementById('akStatus').className = 'ak-status';
+    document.getElementById('akNewKey').focus();
+  }
+}
+
+function toggleAkVis() {
+  const inp = document.getElementById('akNewKey');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function saveAnthropicKey() {
+  const key = document.getElementById('akNewKey').value.trim();
+  if (!key) { setAkStatus('error', 'Please enter a key'); return; }
+  const prefix = 'sk-' + 'ant-';
+  if (!key.startsWith(prefix)) { setAkStatus('error', 'Key should start with ' + prefix); return; }
+  
+  const btn = document.getElementById('akSaveBtn');
+  btn.disabled = true;
+  btn.textContent = 'validating…';
+  setAkStatus('loading', 'Testing key against Anthropic API…');
+  
+  try {
+    const r = await fetch('/api/settings/anthropic-key', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({key})
+    });
+    const d = await r.json();
+    if (d.error) {
+      setAkStatus('error', d.error);
+      btn.disabled = false;
+      btn.textContent = 'validate & save';
+      return;
+    }
+    setAkStatus('success', `Key saved successfully. Tested with ${d.model || 'Anthropic API'}`);
+    toast('success', 'Anthropic Key Updated', d.masked);
+    document.getElementById('akMasked').textContent = d.masked;
+    document.getElementById('akMeta').textContent = 'api key · active';
+    setTimeout(() => {
+      document.getElementById('akEditForm').style.display = 'none';
+      document.getElementById('akEditBtn').textContent = 'change key';
+      document.getElementById('akNewKey').value = '';
+    }, 2000);
+    btn.disabled = false;
+    btn.textContent = 'validate & save';
+    refreshAll();
+  } catch(e) {
+    setAkStatus('error', e.message);
+    btn.disabled = false;
+    btn.textContent = 'validate & save';
+  }
+}
+
+function setAkStatus(type, msg) {
+  const el = document.getElementById('akStatus');
+  el.className = 'ak-status ' + type;
+  el.textContent = msg;
 }
 </script>
 

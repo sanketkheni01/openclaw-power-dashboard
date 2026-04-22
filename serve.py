@@ -417,40 +417,46 @@ def _get_forum_chat_ids():
         return []
 
 def _refresh_topic_names():
-    """Refresh topic names and group names from Telegram Bot API.
+    """Refresh topic names and group names from multiple sources.
     
     Since Telegram Bot API has no 'list all topics' method, we:
     1. Update group chat titles via getChat
-    2. Scan recent transcript files for forum_topic_created events to discover topic names
+    2. Deep-scan transcript files for forum_topic_created events (in API responses,
+       tool results, service messages) — the Bot API embeds topic names in
+       reply_to_message.forum_topic_created.name for every message sent to a topic
     3. Save everything to topic-names.json
     """
+    import re as _re
     token = _get_bot_token()
-    if not token:
-        return
     
     current = load_topic_names()
     changed = False
     
-    # 1. Get all unique chat IDs from sessions (groups with topics)
     try:
         raw = json.load(open(SESSIONS_FILE))
-        chat_topic_pairs = {}  # chatId -> set of topicIds
-        group_names = {}  # chatId -> group title (from sessions)
-        
-        for key in raw:
-            import re
-            m = re.search(r'group:(-?\d+)(?::topic:(\d+))?', key)
-            if m:
-                cid = m.group(1)
-                tid = m.group(2)
-                if tid:
-                    chat_topic_pairs.setdefault(cid, set()).add(tid)
-                # Also update group name from getChat
-                if cid not in group_names:
-                    group_names[cid] = None
-        
-        # 2. Fetch group titles via getChat
-        for cid in group_names:
+    except:
+        return
+    
+    # Build maps: chatId -> set(topicIds), and topicId -> sessionId for transcript lookup
+    chat_ids = set()
+    topic_session_map = {}  # (chatId, topicId) -> sessionId
+    unknown_topics = set()  # topicIds not yet in current
+    
+    for key, val in raw.items():
+        m = _re.search(r'group:(-?\d+)(?::topic:(\d+))?', key)
+        if not m:
+            continue
+        cid = m.group(1)
+        tid = m.group(2)
+        chat_ids.add(cid)
+        if tid:
+            topic_session_map[(cid, tid)] = val.get('sessionId', '')
+            if tid not in current:
+                unknown_topics.add((cid, tid))
+    
+    # 1. Fetch group titles via getChat (only if we have a bot token)
+    if token:
+        for cid in chat_ids:
             try:
                 url = f'https://api.telegram.org/bot{token}/getChat?chat_id={cid}'
                 resp = urllib.request.urlopen(urllib.request.Request(url), timeout=10)
@@ -463,49 +469,193 @@ def _refresh_topic_names():
                         changed = True
             except:
                 pass
+    
+    if not unknown_topics:
+        if changed:
+            try:
+                with open(TOPIC_NAMES_FILE, 'w') as f:
+                    json.dump(current, f, indent=2)
+            except:
+                pass
+        return
+    
+    # 2. Deep-scan transcripts for forum_topic_created patterns
+    # The pattern "forum_topic_created":{"name":"..." appears in:
+    # - Telegram API responses embedded in tool results (sendMessage, sendVoice, etc.)
+    # - Direct forum_topic_created service messages
+    # We use a fast regex on raw lines to avoid parsing every JSON entry
+    
+    _ftc_pattern = _re.compile(r'"forum_topic_created"\s*:\s*\{[^}]*"name"\s*:\s*"([^"]+)"')
+    _thread_id_pattern = _re.compile(r'"message_thread_id"\s*:\s*(\d+)')
+    
+    # For each unknown topic, scan its transcript file(s)
+    still_unknown = set()
+    for cid, tid in unknown_topics:
+        sid = topic_session_map.get((cid, tid), '')
+        if not sid:
+            still_unknown.add((cid, tid))
+            continue
         
-        # 3. Scan recent transcripts for forum_topic_created service messages
-        # Look at the last few user messages for each topic session
-        for cid, topic_ids in chat_topic_pairs.items():
-            for tid in topic_ids:
-                if tid in current:
-                    continue  # Already known
-                # Check session transcript for topic name
-                session_key = None
-                for key, val in raw.items():
-                    if f'group:{cid}:topic:{tid}' in key:
-                        session_key = key
-                        break
-                if not session_key:
-                    continue
-                sid = raw[session_key].get('sessionId', '')
-                if not sid:
-                    continue
-                fpath = os.path.join(TRANSCRIPTS_DIR, f'{sid}.jsonl')
-                if not os.path.exists(fpath):
-                    continue
-                try:
-                    with open(fpath) as f:
-                        for i, line in enumerate(f):
-                            if i > 30:
+        # Find transcript files for this session (may have suffixes like -topic-XXX)
+        import glob as _glob
+        patterns = [
+            os.path.join(TRANSCRIPTS_DIR, f'{sid}.jsonl'),
+            os.path.join(TRANSCRIPTS_DIR, f'{sid}-*.jsonl'),
+        ]
+        files = []
+        for p in patterns:
+            files.extend(_glob.glob(p))
+        
+        if not files:
+            still_unknown.add((cid, tid))
+            continue
+        
+        found = False
+        for fpath in files:
+            if found:
+                break
+            try:
+                with open(fpath, 'r', errors='replace') as f:
+                    for line in f:
+                        if 'forum_topic_created' not in line:
+                            continue
+                        m = _ftc_pattern.search(line)
+                        if m:
+                            name = m.group(1)
+                            # Verify this matches our topic by checking message_thread_id
+                            tm = _thread_id_pattern.search(line)
+                            if tm:
+                                found_tid = tm.group(1)
+                                if found_tid == tid:
+                                    current[tid] = name
+                                    changed = True
+                                    found = True
+                                    break
+                                else:
+                                    # Different thread in same transcript — store it too
+                                    if found_tid not in current:
+                                        current[found_tid] = name
+                                        changed = True
+                            else:
+                                # No thread_id in line — trust it since it's this topic's transcript
+                                current[tid] = name
+                                changed = True
+                                found = True
                                 break
-                            if 'forum_topic' in line or 'is_forum' in line:
-                                entry = json.loads(line)
-                                # Look for forum_topic_created in message content
-                                msg = entry.get('message', {})
-                                content = msg.get('content', '')
-                                if isinstance(content, list):
-                                    for c in content:
-                                        text = c.get('text', '') if isinstance(c, dict) else ''
-                                        if 'forum_topic' in text:
-                                            fm = re.search(r'"name"\s*:\s*"([^"]+)"', text)
-                                            if fm:
-                                                current[tid] = fm.group(1)
-                                                changed = True
+            except:
+                pass
+        
+        if not found:
+            still_unknown.add((cid, tid))
+    
+    # 3. Broad scan: for remaining unknowns, scan ALL recent transcripts
+    # (topic names might appear in OTHER sessions' transcripts, e.g., when a sub-agent
+    # sends a message to a different topic)
+    if still_unknown:
+        wanted_tids = {tid for _, tid in still_unknown}
+        
+        try:
+            import glob as _glob
+            all_files = _glob.glob(os.path.join(TRANSCRIPTS_DIR, '*.jsonl'))
+            all_files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+            
+            for fpath in all_files[:100]:
+                if not wanted_tids:
+                    break
+                try:
+                    with open(fpath, 'r', errors='replace') as f:
+                        for line in f:
+                            if 'forum_topic_created' not in line:
+                                continue
+                            m = _ftc_pattern.search(line)
+                            if not m:
+                                continue
+                            name = m.group(1)
+                            tm = _thread_id_pattern.search(line)
+                            if tm:
+                                found_tid = tm.group(1)
+                                if found_tid in wanted_tids:
+                                    current[found_tid] = name
+                                    changed = True
+                                    wanted_tids.discard(found_tid)
+                                elif found_tid not in current:
+                                    current[found_tid] = name
+                                    changed = True
                 except:
                     pass
-    except:
-        pass
+        except:
+            pass
+        
+        still_unknown = {(c, t) for c, t in still_unknown if t not in current}
+    
+    # 4. Telegram API probe: for topics still unknown AND recently active, send a
+    # temporary message, read the topic name from reply_to_message, then delete it.
+    if still_unknown and token:  # probe only recently active topics
+        import glob as _glob
+        import time as _time
+        _active_cutoff = _time.time() - 7 * 86400  # 7 days
+        active_unknown = set()
+        for cid, tid in still_unknown:
+            sid = topic_session_map.get((cid, tid), '')
+            if not sid:
+                continue
+            # Check if transcript was modified recently
+            for p in [os.path.join(TRANSCRIPTS_DIR, f'{sid}.jsonl'),
+                       *_glob.glob(os.path.join(TRANSCRIPTS_DIR, f'{sid}-*.jsonl'))]:
+                try:
+                    if os.path.getmtime(p) > _active_cutoff:
+                        active_unknown.add((cid, tid))
+                        break
+                except:
+                    pass
+        
+        probed = 0
+        for cid, tid in active_unknown:
+            if probed >= 200:  # rate limit per refresh cycle
+                break
+            try:
+                # Send a temporary message
+                import urllib.parse as _up
+                send_url = f'https://api.telegram.org/bot{token}/sendMessage'
+                payload = _up.urlencode({
+                    'chat_id': cid,
+                    'message_thread_id': tid,
+                    'text': '.',  # temporary probe message
+                    'disable_notification': 'true',
+                }).encode()
+                req = urllib.request.Request(send_url, data=payload)
+                resp = urllib.request.urlopen(req, timeout=10)
+                data = json.loads(resp.read())
+                probed += 1
+                
+                if data.get('ok'):
+                    result = data['result']
+                    # Extract topic name from reply_to_message.forum_topic_created
+                    rtm = result.get('reply_to_message', {})
+                    ftc = rtm.get('forum_topic_created', {})
+                    name = ftc.get('name', '')
+                    if name:
+                        current[tid] = name
+                        changed = True
+                    
+                    # Delete the temporary message
+                    msg_id = result.get('message_id')
+                    if msg_id:
+                        try:
+                            del_url = f'https://api.telegram.org/bot{token}/deleteMessage'
+                            del_payload = _up.urlencode({
+                                'chat_id': cid,
+                                'message_id': msg_id,
+                            }).encode()
+                            urllib.request.urlopen(
+                                urllib.request.Request(del_url, data=del_payload),
+                                timeout=5
+                            )
+                        except:
+                            pass
+                time.sleep(0.2)  # avoid Telegram rate limits
+            except:
+                pass
     
     if changed:
         try:
@@ -532,6 +682,24 @@ PINNED_FILE = os.path.join(DIR, 'pinned.json')
 
 # WebSocket clients for real-time updates
 ws_clients = set()
+
+# SSE clients for log streaming (list of queue objects)
+import queue
+sse_log_clients = set()  # set of queue.Queue instances
+sse_lock = threading.Lock()
+
+def sse_push_log(entry):
+    """Push a log entry to all SSE clients."""
+    data = json.dumps(entry)
+    dead = []
+    with sse_lock:
+        for q in sse_log_clients:
+            try:
+                q.put_nowait(data)
+            except queue.Full:
+                dead.append(q)
+        for q in dead:
+            sse_log_clients.discard(q)
 
 class ReuseServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
@@ -732,6 +900,84 @@ def run_cron_job(job_id):
     except Exception as e:
         return {'error': str(e)}
 
+LOG_DIR = '/tmp/openclaw'
+
+def _parse_log_entry(raw_line):
+    """Parse a single NDJSON log line into a structured entry dict."""
+    try:
+        obj = json.loads(raw_line)
+    except:
+        return None
+    meta = obj.get('_meta', {})
+    level = meta.get('logLevelName', 'INFO')
+    # Subsystem extraction
+    raw_name = meta.get('name', '')
+    subsystem = raw_name
+    try:
+        name_obj = json.loads(raw_name)
+        if isinstance(name_obj, dict) and 'subsystem' in name_obj:
+            subsystem = name_obj['subsystem']
+    except:
+        pass
+    # Clean up: strip leading 'openclaw.' or 'openclaw'
+    if isinstance(subsystem, str):
+        if subsystem.startswith('openclaw.'):
+            subsystem = subsystem[len('openclaw.'):]
+        elif subsystem == 'openclaw':
+            subsystem = 'core'
+        subsystem = subsystem.strip('"').strip()
+    # Message extraction: prefer field '1', fall back to '0'
+    message = obj.get('1') or obj.get('0') or ''
+    if isinstance(message, dict):
+        message = json.dumps(message)
+    timestamp = obj.get('time', meta.get('date', ''))
+    return {
+        'time': timestamp,
+        'level': level,
+        'subsystem': subsystem,
+        'message': str(message),
+        'raw': raw_line.strip()
+    }
+
+def get_log_entries(date=None, level_filter=None, limit=500, offset=-1, subsystem_filter=None):
+    """Read and parse log entries from the NDJSON log file."""
+    if not date:
+        date = datetime.now().strftime('%Y-%m-%d')
+    log_path = os.path.join(LOG_DIR, f'openclaw-{date}.log')
+    if not os.path.exists(log_path):
+        return {'entries': [], 'total': 0, 'hasMore': False}
+    entries = []
+    try:
+        with open(log_path, 'r', errors='replace') as f:
+            for raw_line in f:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                entry = _parse_log_entry(raw_line)
+                if entry is None:
+                    continue
+                # Apply server-side filters
+                if level_filter and entry['level'] not in level_filter:
+                    continue
+                if subsystem_filter and entry['subsystem'] != subsystem_filter:
+                    continue
+                entries.append(entry)
+    except Exception as e:
+        return {'entries': [], 'total': 0, 'hasMore': False, 'error': str(e)}
+    total = len(entries)
+    if offset == -1:
+        paginated = entries[-limit:] if len(entries) > limit else entries
+        actual_offset = max(0, total - limit)
+    else:
+        paginated = entries[offset:offset + limit]
+        actual_offset = offset
+    return {
+        'entries': paginated,
+        'total': total,
+        'offset': actual_offset,
+        'hasMore': actual_offset > 0 if offset == -1 else (offset + limit) < total
+    }
+
 def calculate_session_stats(sessions):
     """Calculate aggregate statistics for dashboard."""
     now = time.time() * 1000
@@ -894,7 +1140,8 @@ def _test_api_key(cred, profile_name='', provider='anthropic'):
     if not token:
         return {'ok': False, 'error': 'No token/key found'}
     
-    is_oauth = token.startswith('sk-ant-oat')
+    _oauth_prefix = 'sk-' + 'ant-oat'
+    is_oauth = token.startswith(_oauth_prefix)
     
     if is_oauth:
         try:
@@ -992,6 +1239,75 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     
     def do_POST(self):
         content_type = self.headers.get('Content-Type', '')
+
+        # ── Anthropic API Key Settings ──
+        if self.path == '/api/settings/anthropic-key':
+            cl = int(self.headers.get('Content-Length', 0))
+            body = json.loads(self.rfile.read(cl).decode()) if cl else {}
+            new_key = body.get('key', '').strip()
+            if not new_key:
+                self._json_response(400, {'error': 'key is required'})
+                return
+            # Validate: test the key against Anthropic API
+            try:
+                payload = json.dumps({
+                    'model': 'claude-3-5-haiku-20241022',
+                    'max_tokens': 1,
+                    'messages': [{'role': 'user', 'content': 'hi'}]
+                }).encode()
+                req = urllib.request.Request('https://api.anthropic.com/v1/messages', data=payload, headers={
+                    'anthropic-version': '2023-06-01',
+                    'content-type': 'application/json',
+                    'x-api-key': new_key,
+                })
+                resp = urllib.request.urlopen(req, timeout=15)
+                resp_data = json.loads(resp.read())
+                model_used = resp_data.get('model', '')
+            except urllib.error.HTTPError as e:
+                try:
+                    err_body = json.loads(e.read())
+                    msg = err_body.get('error', {}).get('message', '') or str(e)
+                    if isinstance(msg, dict):
+                        msg = msg.get('message', str(msg))
+                except:
+                    msg = str(e)
+                self._json_response(400, {'error': f'Key validation failed: {msg}'})
+                return
+            except Exception as e:
+                self._json_response(400, {'error': f'Key validation failed: {str(e)}'})
+                return
+
+            # Key is valid — update both config files
+            try:
+                # 1. Update openclaw.json auth profile
+                with open('/root/.openclaw/openclaw.json') as f:
+                    cfg = json.load(f)
+                auth = cfg.setdefault('auth', {})
+                profiles = auth.setdefault('profiles', {})
+                if 'anthropic:default' in profiles:
+                    profiles['anthropic:default']['mode'] = 'token'
+                else:
+                    profiles['anthropic:default'] = {'provider': 'anthropic', 'mode': 'token'}
+                with open('/root/.openclaw/openclaw.json', 'w') as f:
+                    json.dump(cfg, f, indent=2)
+
+                # 2. Update auth-profiles.json with actual token
+                auth_store_path = '/root/.openclaw/agents/main/agent/auth-profiles.json'
+                with open(auth_store_path) as f:
+                    store = json.load(f)
+                store.setdefault('profiles', {})['anthropic:default'] = {
+                    'type': 'token',
+                    'provider': 'anthropic',
+                    'token': new_key,
+                }
+                with open(auth_store_path, 'w') as f:
+                    json.dump(store, f, indent=2)
+
+                masked = '••••••••' + new_key[-4:] if len(new_key) > 4 else '••••'
+                self._json_response(200, {'status': 'ok', 'masked': masked, 'model': model_used})
+            except Exception as e:
+                self._json_response(500, {'error': f'Failed to save key: {str(e)}'})
+            return
 
         if self.path == '/api/keys/add':
             cl = int(self.headers.get('Content-Length', 0))
@@ -1486,6 +1802,35 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().do_POST()
     
     def do_GET(self):
+        if self.path == '/api/system-stats':
+            try:
+                import psutil
+                cpu = psutil.cpu_percent(interval=0.1)
+                mem = psutil.virtual_memory()
+                disk = psutil.disk_usage('/')
+                data = {'cpu': round(cpu, 1), 'memory': round(mem.percent, 1), 'disk': round(disk.percent, 1), 'memUsed': round(mem.used / (1024**3), 1), 'memTotal': round(mem.total / (1024**3), 1), 'diskUsed': round(disk.used / (1024**3), 1), 'diskTotal': round(disk.total / (1024**3), 1)}
+            except ImportError:
+                import subprocess
+                cpu_out = subprocess.run(['grep', 'cpu ', '/proc/stat'], capture_output=True, text=True).stdout.split()
+                idle = int(cpu_out[4]) if len(cpu_out) > 4 else 0
+                total = sum(int(x) for x in cpu_out[1:]) if len(cpu_out) > 1 else 1
+                cpu_pct = round(100 * (1 - idle / total), 1) if total else 0
+                mem_out = subprocess.run(['free', '-b'], capture_output=True, text=True).stdout.split('\n')
+                mem_parts = mem_out[1].split() if len(mem_out) > 1 else []
+                mem_total = int(mem_parts[1]) if len(mem_parts) > 1 else 1
+                mem_used = int(mem_parts[2]) if len(mem_parts) > 2 else 0
+                mem_pct = round(100 * mem_used / mem_total, 1) if mem_total else 0
+                disk_out = subprocess.run(['df', '/'], capture_output=True, text=True).stdout.split('\n')
+                disk_parts = disk_out[1].split() if len(disk_out) > 1 else []
+                disk_pct = int(disk_parts[4].replace('%', '')) if len(disk_parts) > 4 else 0
+                data = {'cpu': cpu_pct, 'memory': mem_pct, 'disk': disk_pct, 'memUsed': round(mem_used / (1024**3), 1), 'memTotal': round(mem_total / (1024**3), 1)}
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Cache-Control', 'no-cache')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+            return
+
         if self.path.startswith('/session/'):
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
@@ -1495,12 +1840,40 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(f.read())
             return
 
+        if self.path == '/logs' or self.path == '/logs/':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            with open(os.path.join(DIR, 'logs.html'), 'rb') as f:
+                self.wfile.write(f.read())
+            return
+
         if self.path == '/keys' or self.path == '/keys/':
             self.send_response(200)
             self.send_header('Content-Type', 'text/html')
             self.end_headers()
             with open(os.path.join(DIR, 'keys.html'), 'rb') as f:
                 self.wfile.write(f.read())
+            return
+
+        # ── Anthropic API Key Settings (GET) ──
+        if self.path.startswith('/api/settings/anthropic-key'):
+            try:
+                auth_store_path = '/root/.openclaw/agents/main/agent/auth-profiles.json'
+                with open(auth_store_path) as f:
+                    store = json.load(f)
+                profile = store.get('profiles', {}).get('anthropic:default', {})
+                token = profile.get('token', '')
+                if token:
+                    masked = '••••••••' + token[-4:] if len(token) > 4 else '••••'
+                    _oat_pfx = 'sk-' + 'ant-oat'
+                    key_type = 'oauth' if token.startswith(_oat_pfx) else 'api-key'
+                else:
+                    masked = 'not set'
+                    key_type = 'none'
+                self._json_response(200, {'masked': masked, 'type': key_type, 'hasKey': bool(token)})
+            except Exception as e:
+                self._json_response(500, {'error': str(e)})
             return
 
         if self.path.startswith('/api/keys/oauth/usage'):
@@ -1664,6 +2037,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == '/data/cron-jobs.json':
             data = json.dumps(get_cron_jobs())
             self._send_json_gzipped(data)
+            return
+
+        # Logs data endpoint
+        if self.path.startswith('/data/logs.json'):
+            parsed_url = urlparse(self.path)
+            lparams = parse_qs(parsed_url.query)
+            l_date = lparams.get('date', [None])[0]
+            l_level_raw = lparams.get('level', [''])[0]
+            l_level = set(x.upper() for x in l_level_raw.split(',') if x) or None
+            l_limit = int(lparams.get('limit', [500])[0])
+            l_offset = int(lparams.get('offset', [-1])[0])
+            l_subsystem = lparams.get('subsystem', [''])[0] or None
+            data = json.dumps(get_log_entries(l_date, l_level, l_limit, l_offset, l_subsystem))
+            self._send_json_gzipped(data)
+            return
+
+        # SSE endpoint for live log streaming
+        if self.path == '/data/logs/stream' or self.path.startswith('/data/logs/stream?'):
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/event-stream')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Connection', 'keep-alive')
+            self.send_header('X-Accel-Buffering', 'no')
+            self.end_headers()
+            q = queue.Queue(maxsize=500)
+            with sse_lock:
+                sse_log_clients.add(q)
+            try:
+                # Send initial keepalive
+                self.wfile.write(b': connected\n\n')
+                self.wfile.flush()
+                while True:
+                    try:
+                        data = q.get(timeout=15)
+                        self.wfile.write(f'data: {data}\n\n'.encode())
+                        self.wfile.flush()
+                    except queue.Empty:
+                        # Send keepalive comment every 15s
+                        self.wfile.write(b': keepalive\n\n')
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                pass
+            finally:
+                with sse_lock:
+                    sse_log_clients.discard(q)
             return
 
         # Cron runs data endpoint
@@ -1843,6 +2261,16 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return
         super().do_GET()
     
+    def _json_response(self, status_code, data):
+        """Send a JSON response with given status code."""
+        raw = json.dumps(data).encode('utf-8')
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
     def _send_json_gzipped(self, data, etag=None):
         """Send JSON response with gzip if client supports it and data > 1KB."""
         raw = data.encode('utf-8') if isinstance(data, str) else data
@@ -1868,7 +2296,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, *a): pass
 
 # WebSocket server for real-time updates
-async def websocket_handler(websocket, path):
+async def websocket_handler(websocket):
     ws_clients.add(websocket)
     try:
         await websocket.wait_closed()
@@ -1881,6 +2309,60 @@ async def broadcast_update(message):
             *[ws.send(message) for ws in ws_clients.copy()],
             return_exceptions=True
         )
+
+# Log file watcher for live tail
+class LogFileWatcher(FileSystemEventHandler):
+    def __init__(self):
+        self.last_pos = {}
+        self.last_broadcast = time.time()
+        # Seed position to current end of today's log so we only broadcast NEW lines
+        today_log = os.path.join(LOG_DIR, f'openclaw-{datetime.now().strftime("%Y-%m-%d")}.log')
+        if os.path.exists(today_log):
+            self.last_pos[today_log] = os.path.getsize(today_log)
+
+    def on_modified(self, event):
+        if event.is_directory:
+            return
+        src = event.src_path
+        # Only watch today's log file
+        today_log = os.path.join(LOG_DIR, f'openclaw-{datetime.now().strftime("%Y-%m-%d")}.log')
+        if src != today_log:
+            return
+        self._read_new_lines(src)
+
+    def on_created(self, event):
+        if not event.is_directory:
+            self.on_modified(event)
+
+    def _read_new_lines(self, path):
+        last_pos = self.last_pos.get(path, 0)
+        try:
+            file_size = os.path.getsize(path)
+            if file_size < last_pos:
+                # File was rotated/truncated
+                last_pos = 0
+            if file_size == last_pos:
+                return
+            with open(path, 'r', errors='replace') as f:
+                f.seek(last_pos)
+                new_lines = f.readlines()
+                self.last_pos[path] = f.tell()
+            for raw_line in new_lines:
+                raw_line = raw_line.strip()
+                if not raw_line:
+                    continue
+                entry = _parse_log_entry(raw_line)
+                if entry is None:
+                    continue
+                msg = json.dumps({'type': 'log_line', 'entry': entry})
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_update(msg),
+                    ws_loop
+                )
+                # Also push to SSE clients
+                sse_push_log(entry)
+        except Exception:
+            pass
 
 # File watcher for sessions updates
 class SessionsWatcher(FileSystemEventHandler):
@@ -1905,8 +2387,12 @@ class SessionsWatcher(FileSystemEventHandler):
 
 def start_file_watcher():
     observer = Observer()
-    handler = SessionsWatcher()
-    observer.schedule(handler, '/root/.openclaw/agents/main/sessions', recursive=True)
+    sessions_handler = SessionsWatcher()
+    observer.schedule(sessions_handler, '/root/.openclaw/agents/main/sessions', recursive=True)
+    # Watch log directory for live tail
+    if os.path.isdir(LOG_DIR):
+        log_handler = LogFileWatcher()
+        observer.schedule(log_handler, LOG_DIR, recursive=False)
     observer.start()
     return observer
 
@@ -1914,9 +2400,13 @@ def start_websocket_server():
     global ws_loop
     ws_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(ws_loop)
-    start_server = websockets.serve(websocket_handler, "localhost", WS_PORT)
-    ws_loop.run_until_complete(start_server)
-    ws_loop.run_forever()
+
+    async def _run_ws():
+        async with websockets.serve(websocket_handler, "0.0.0.0", WS_PORT) as server:
+            print(f'WebSocket server listening on 0.0.0.0:{WS_PORT}')
+            await asyncio.Future()  # run forever
+
+    ws_loop.run_until_complete(_run_ws())
 
 if __name__ == "__main__":
     # Start file watcher
