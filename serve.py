@@ -720,91 +720,190 @@ def save_pinned(pinned):
     except:
         pass
 
-def get_recent_activity(session_id, max_lines=5):
-    """Read last few lines of a transcript to get current activity."""
+
+
+def timestamp_sort_key(ts):
+    if isinstance(ts, (int, float)):
+        return float(ts)
+    if isinstance(ts, str) and ts:
+        try:
+            return datetime.fromisoformat(ts.replace('Z', '+00:00')).timestamp() * 1000
+        except Exception:
+            return 0
+    return 0
+
+def find_session_files(session_id):
+    """Return transcript files for a session id, including topic-suffixed files.
+
+    Python's glob treats [] in UUID-looking ids as character classes if those
+    ever appear, so keep matching explicit and centralised. Prefer the normal
+    conversation jsonl over trajectory sidecars when both are present.
+    """
     patterns = [
         os.path.join(TRANSCRIPTS_DIR, f'{session_id}.jsonl'),
         os.path.join(TRANSCRIPTS_DIR, f'{session_id}-*.jsonl'),
     ]
     files = []
-    for p in patterns:
-        files.extend(glob.glob(p))
+    for pattern in patterns:
+        files.extend(glob.glob(pattern))
+    return sorted(set(files), key=lambda f: ('.trajectory' in os.path.basename(f), f))
+
+def normalize_content(content):
+    if isinstance(content, str):
+        return [{'type': 'text', 'text': content}]
+    return content if isinstance(content, list) else []
+
+def parse_transcript_entry(entry):
+    """Convert a persisted session jsonl event into dashboard transcript entry.
+
+    Supports both classic `message` events and newer trajectory-only events so
+    sessions do not render as an unexplained empty transcript.
+    """
+    msg = entry.get('message') or {}
+    role = msg.get('role', '')
+    model = msg.get('model', '')
+    stop = msg.get('stopReason', '')
+    ts = msg.get('timestamp', entry.get('timestamp', entry.get('ts', '')))
+    cost = msg.get('usage', {}).get('cost', {}).get('total', 0)
+    tokens_in = msg.get('usage', {}).get('input', 0)
+    tokens_out = msg.get('usage', {}).get('output', 0)
+    cache_read = msg.get('usage', {}).get('cacheRead', 0)
+    content = normalize_content(msg.get('content', []))
+    parsed = []
+
+    if role == 'toolResult':
+        tool_call_id = msg.get('toolCallId', '')
+        tool_name = msg.get('toolName', '?')
+        result_text = ''
+        for c in content:
+            if c.get('type') == 'text':
+                result_text = c.get('text', '')[:4000]
+                break
+            if c.get('type') == 'image':
+                src = c.get('source', {})
+                url = src.get('url', '') or c.get('url', '') or c.get('image', '')
+                if url:
+                    result_text = f'[IMAGE: {url}]'
+                    break
+        parsed.append({'type': 'result', 'name': tool_name, 'text': result_text, 'id': tool_call_id})
+    else:
+        for c in content:
+            t = c.get('type', '')
+            if t == 'toolCall':
+                args = c.get('arguments', {})
+                if isinstance(args, dict):
+                    args = {k: (v[:2000] + '…' if isinstance(v, str) and len(v) > 2000 else v) for k, v in args.items()}
+                parsed.append({'type': 'tool', 'name': c.get('name','?'), 'args': args, 'id': c.get('id','')})
+            elif t == 'image':
+                src = c.get('source', {})
+                url = src.get('url', '') or c.get('url', '') or c.get('image', '')
+                parsed.append({'type': 'image', 'url': url})
+            elif t == 'text':
+                txt = c.get('text', '')
+                if txt.strip():
+                    parsed.append({'type': 'text', 'text': txt[:5000]})
+            elif t == 'thinking':
+                thinking = c.get('thinking', '')
+                if thinking:
+                    parsed.append({'type': 'thinking', 'text': thinking[:3000]})
+
+    if not parsed and entry.get('traceSchema') == 'openclaw-trajectory':
+        event_type = entry.get('type', 'trajectory')
+        data = entry.get('data') or {}
+        role = 'system'
+        model = entry.get('modelId', model)
+        lines = [event_type]
+        if event_type == 'prompt.submitted' and data.get('prompt'):
+            lines = ['prompt submitted', data.get('prompt', '')[:5000]]
+        elif event_type == 'model.completed':
+            if data.get('text'):
+                lines = ['model completed', data.get('text', '')[:5000]]
+            elif data.get('truncated'):
+                lines = ['model completed', f"output omitted by trajectory log ({data.get('reason', 'truncated')})"]
+        elif event_type == 'session.started':
+            lines = ['session started', f"provider: {entry.get('provider','?')} · model: {entry.get('modelId','?')}"]
+        elif event_type == 'session.ended':
+            lines = ['session ended']
+        elif event_type == 'context.compiled' and data.get('prompt'):
+            lines = ['context compiled', data.get('prompt', '')[:5000]]
+        parsed.append({'type': 'text', 'text': '\n'.join(x for x in lines if x)})
+
+    if not parsed:
+        return None
+    return {
+        'role': role, 'model': model, 'stop': stop,
+        'ts': ts, 'cost': cost,
+        'tokens': {'in': tokens_in, 'out': tokens_out, 'cache': cache_read},
+        'content': parsed
+    }
+
+def get_recent_activity(session_id, max_lines=5):
+    """Read recent parsed transcript entries to get current activity."""
+    files = find_session_files(session_id)
     if not files:
         return None
-    
-    f = max(files, key=os.path.getmtime)
-    
+
     try:
-        with open(f, 'rb') as fh:
-            fh.seek(0, 2)
-            size = fh.tell()
-            read_size = min(size, 10240)
-            fh.seek(-read_size, 2)
-            data = fh.read().decode('utf-8', errors='ignore')
-        
-        lines = [l for l in data.strip().split('\n') if l.strip()]
-        activities = []
-        
-        for line in lines[-max_lines:]:
-            try:
-                entry = json.loads(line)
-                msg = entry.get('message', {})
-                role = msg.get('role', '')
-                model = msg.get('model', '')
-                stop = msg.get('stopReason', '')
-                ts = msg.get('timestamp', entry.get('timestamp', ''))
-                cost = msg.get('usage', {}).get('cost', {}).get('total', 0)
-                
-                content = msg.get('content', [])
-                if isinstance(content, str):
-                    content = [{'type': 'text', 'text': content}]
-                
-                activity = {'role': role, 'model': model, 'stop': stop, 'ts': ts, 'cost': cost}
-                
-                if role == 'toolResult':
-                    tn = msg.get('toolName', '?')
-                    rt = ''
-                    for c in (content if isinstance(content, list) else []):
-                        if c.get('type') == 'text':
-                            rt = c.get('text', '')[:60]
-                            break
-                    activity['action'] = f"✅ {tn} done"
-                    if rt: activity['detail'] = rt
-                    activities.append(activity)
+        entries = []
+        # Prefer newest files first but inspect a few so a fresh trajectory sidecar
+        # does not hide the real conversation file.
+        for f in sorted(files, key=os.path.getmtime, reverse=True)[:3]:
+            with open(f, 'rb') as fh:
+                fh.seek(0, 2)
+                size = fh.tell()
+                read_size = min(size, 10240)
+                fh.seek(-read_size, 2)
+                data = fh.read().decode('utf-8', errors='ignore')
+            for line in [l for l in data.strip().split('\n') if l.strip()][-max_lines * 2:]:
+                try:
+                    parsed = parse_transcript_entry(json.loads(line))
+                    if parsed:
+                        entries.append(parsed)
+                except Exception:
                     continue
-                
-                for c in (content if isinstance(content, list) else []):
-                    t = c.get('type', '')
-                    if t == 'toolCall':
-                        activity['action'] = f"🔧 {c.get('name', '?')}"
-                        args = c.get('arguments', {})
-                        if isinstance(args, dict):
-                            if 'command' in args:
-                                cmd = args['command'][:60]
-                                activity['detail'] = cmd
-                            elif 'query' in args:
-                                activity['detail'] = args['query'][:60]
-                            elif 'url' in args:
-                                activity['detail'] = args['url'][:60]
-                            elif 'action' in args:
-                                activity['detail'] = args['action']
-                    elif t == 'toolResult':
-                        activity['action'] = f"✅ {c.get('name', '?')} done"
-                    elif t == 'text' and c.get('text', '').strip():
-                        txt = c['text'].strip()
-                        if txt != 'NO_REPLY' and len(txt) > 2:
-                            activity['action'] = '💬 Responding'
-                            activity['detail'] = txt[:80]
-                    elif t == 'thinking':
-                        activity['action'] = '🧠 Thinking'
-                
-                if 'action' in activity:
-                    activities.append(activity)
-            except:
-                continue
-        
+
+        activities = []
+        for parsed in sorted(entries, key=lambda e: timestamp_sort_key(e.get('ts')))[-max_lines * 2:]:
+            activity = {
+                'role': parsed.get('role', ''),
+                'model': parsed.get('model', ''),
+                'stop': parsed.get('stop', ''),
+                'ts': parsed.get('ts', ''),
+                'cost': parsed.get('cost', 0),
+            }
+            for c in parsed.get('content', []):
+                t = c.get('type', '')
+                if t == 'result':
+                    activity['action'] = f"✅ {c.get('name', '?')} done"
+                    if c.get('text'):
+                        activity['detail'] = c.get('text', '')[:60]
+                    break
+                if t == 'tool':
+                    activity['action'] = f"🔧 {c.get('name', '?')}"
+                    args = c.get('args', {})
+                    if isinstance(args, dict):
+                        if 'command' in args:
+                            activity['detail'] = str(args['command'])[:60]
+                        elif 'query' in args:
+                            activity['detail'] = str(args['query'])[:60]
+                        elif 'url' in args:
+                            activity['detail'] = str(args['url'])[:60]
+                        elif 'action' in args:
+                            activity['detail'] = str(args['action'])[:60]
+                    break
+                if t == 'text':
+                    txt = c.get('text', '').strip()
+                    if txt and txt != 'NO_REPLY':
+                        activity['action'] = '💬 Responding'
+                        activity['detail'] = txt[:80]
+                        break
+                if t == 'thinking':
+                    activity['action'] = '🧠 Thinking'
+                    break
+            if 'action' in activity:
+                activities.append(activity)
         return activities[-3:] if activities else None
-    except:
+    except Exception:
         return None
 
 def get_auth_info():
@@ -2097,102 +2196,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             tparams = parse_qs(parsed_url.query)
             t_limit = int(tparams.get('limit', [100])[0])
             t_offset = int(tparams.get('offset', [-1])[0])  # -1 means "last N"
-            import glob
-            patterns = [
-                os.path.join(TRANSCRIPTS_DIR, f'{sid}.jsonl'),
-                os.path.join(TRANSCRIPTS_DIR, f'{sid}-*.jsonl'),
-            ]
-            files = []
-            for p in patterns:
-                files.extend(glob.glob(p))
-            
+            files = find_session_files(sid)
             if not files:
                 self.send_response(404)
                 self.end_headers()
                 self.wfile.write(b'{"error":"not found"}')
                 return
-            
-            f = max(files, key=os.path.getmtime)
+
             entries = []
+            used_files = []
             try:
-                with open(f, 'r') as fh:
-                    for line in fh:
-                        line = line.strip()
-                        if not line:
-                            continue
-                        try:
-                            entry = json.loads(line)
-                            msg = entry.get('message', {})
-                            role = msg.get('role', '')
-                            model = msg.get('model', '')
-                            stop = msg.get('stopReason', '')
-                            ts = msg.get('timestamp', entry.get('timestamp', ''))
-                            cost = msg.get('usage', {}).get('cost', {}).get('total', 0)
-                            tokens_in = msg.get('usage', {}).get('input', 0)
-                            tokens_out = msg.get('usage', {}).get('output', 0)
-                            cache_read = msg.get('usage', {}).get('cacheRead', 0)
-                            
-                            content = msg.get('content', [])
-                            if isinstance(content, str):
-                                content = [{'type': 'text', 'text': content}]
-                            
-                            parsed = []
-                            
-                            if role == 'toolResult':
-                                tool_call_id = msg.get('toolCallId', '')
-                                tool_name = msg.get('toolName', '?')
-                                result_text = ''
-                                for c in (content if isinstance(content, list) else []):
-                                    if c.get('type') == 'text':
-                                        result_text = c.get('text', '')[:4000]
-                                        break
-                                    elif c.get('type') == 'image':
-                                        src = c.get('source', {})
-                                        url = src.get('url', '') or c.get('url', '') or c.get('image', '')
-                                        if url:
-                                            result_text = f'[IMAGE: {url}]'
-                                            break
-                                parsed.append({'type': 'result', 'name': tool_name, 'text': result_text, 'id': tool_call_id})
-                            
-                            for c in (content if isinstance(content, list) else []):
-                                t = c.get('type', '')
-                                if role == 'toolResult':
-                                    break
-                                if t == 'toolCall':
-                                    args = c.get('arguments', {})
-                                    if isinstance(args, dict):
-                                        for k, v in args.items():
-                                            if isinstance(v, str) and len(v) > 2000:
-                                                args[k] = v[:2000] + '…'
-                                    parsed.append({'type': 'tool', 'name': c.get('name','?'), 'args': args, 'id': c.get('id','')})
-                                elif t == 'image':
-                                    src = c.get('source', {})
-                                    url = src.get('url', '') or c.get('url', '') or c.get('image', '')
-                                    parsed.append({'type': 'image', 'url': url})
-                                elif t == 'text':
-                                    txt = c.get('text', '')
-                                    if txt.strip():
-                                        parsed.append({'type': 'text', 'text': txt[:5000]})
-                                elif t == 'thinking':
-                                    thinking = c.get('thinking', '')
-                                    if thinking:
-                                        parsed.append({'type': 'thinking', 'text': thinking[:3000]})
-                            
-                            if parsed:
-                                entries.append({
-                                    'role': role, 'model': model, 'stop': stop,
-                                    'ts': ts, 'cost': cost,
-                                    'tokens': {'in': tokens_in, 'out': tokens_out, 'cache': cache_read},
-                                    'content': parsed
-                                })
-                        except:
-                            continue
+                # Merge all matching files. Some Telegram/topic sessions have both
+                # conversation jsonl and trajectory sidecar files; reading only the
+                # newest file can select the sidecar and make the UI show "no entries".
+                for f in sorted(files, key=os.path.getmtime):
+                    file_had_entries = False
+                    with open(f, 'r', errors='replace') as fh:
+                        for line in fh:
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                parsed_entry = parse_transcript_entry(json.loads(line))
+                            except Exception:
+                                continue
+                            if parsed_entry:
+                                entries.append(parsed_entry)
+                                file_had_entries = True
+                    if file_had_entries:
+                        used_files.append(os.path.basename(f))
             except Exception as e:
                 self.send_response(500)
                 self.end_headers()
                 self.wfile.write(json.dumps({'error': str(e)}).encode())
                 return
-            
+
+            entries.sort(key=lambda e: timestamp_sort_key(e.get('ts')))
             total = len(entries)
             # Pagination: default returns last 100 entries
             if t_offset == -1:
@@ -2202,9 +2241,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             else:
                 paginated = entries[t_offset:t_offset + t_limit]
                 actual_offset = t_offset
-            
+
             data = json.dumps({
-                'file': os.path.basename(f),
+                'file': used_files[-1] if len(used_files) == 1 else used_files,
+                'files': used_files,
                 'count': len(paginated),
                 'total': total,
                 'offset': actual_offset,
@@ -2213,7 +2253,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             })
             self._send_json_gzipped(data)
             return
-        
+
         if self.path.startswith('/data/sessions.json'):
             parsed = urlparse(self.path)
             params = parse_qs(parsed.query)
