@@ -53,6 +53,13 @@ a:hover{text-decoration:underline}
 
 .footer{padding:4px 16px;font-size:9px;color:var(--ink-4);border-top:1px solid var(--wire);display:flex;justify-content:space-between;background:var(--panel)}
 .refresh-indicator{font-size:9px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.action-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px solid var(--wire)}
+.btn{font-family:var(--mono);font-size:9px;color:var(--ink-2);background:var(--rack);border:1px solid var(--wire-mid);border-radius:var(--radius);padding:5px 7px;cursor:pointer;text-transform:uppercase;letter-spacing:.4px}
+.btn:hover{color:var(--ink);border-color:var(--amber);background:var(--shelf)}
+.btn.warn{color:var(--amber)}
+.btn.danger{color:var(--led-red)}
+.toast{position:fixed;right:10px;bottom:10px;background:var(--panel);border:1px solid var(--wire-mid);color:var(--ink);padding:8px 10px;font-size:10px;z-index:100;border-radius:var(--radius);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.toast.error{border-color:rgba(248,113,113,.45);color:var(--led-red)}
 
 @media(max-width:768px){.grid{grid-template-columns:1fr}}
 </style>
@@ -130,6 +137,30 @@ function metric(label, value, pct) {
   </div>${pct !== undefined ? bar(pct) : ''}`;
 }
 
+function toast(message, isError=false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (isError ? ' error' : '');
+  el.textContent = message;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 4500);
+}
+
+async function postAction(url, label, confirmText) {
+  if (confirmText && !confirm(confirmText)) return;
+  try {
+    const r = await fetch(url, {method: 'POST'});
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(d.error || r.statusText);
+    toast(`${label}: ${d.status || 'ok'}`);
+    setTimeout(load, 1200);
+  } catch (e) {
+    toast(`${label} failed: ${e.message}`, true);
+  }
+}
+function triggerGatewayFix(){ postAction('/api/fix-gateway', 'Gateway fix'); }
+function startGatewayWatch(){ postAction('/api/start-gateway-watch', 'Gateway watch'); }
+function restartGateway(){ postAction('/api/restart-gateway', 'Gateway restart', 'Restart OpenClaw gateway?'); }
+
 async function load() {
   try {
     const r = await fetch('/data/system.json?t=' + Date.now());
@@ -173,7 +204,11 @@ async function load() {
         <span class="metric-label"><span class="status-dot ${s.active ? 'dot-ok' : 'dot-err'}" style="margin-right:4px"></span>${s.name}</span>
         <span class="metric-value" style="color:${s.active ? 'var(--led-green)' : 'var(--led-red)'}">${s.status}</span>
       </div>`
-    ).join('');
+    ).join('') + `<div class="action-row">
+      <button class="btn warn" onclick="triggerGatewayFix()">fix gateway</button>
+      <button class="btn" onclick="startGatewayWatch()">start watch</button>
+      <button class="btn danger" onclick="restartGateway()">restart gateway</button>
+    </div>`;
 
     const procs = d.processes || [];
     document.getElementById('processTable').innerHTML = procs.map(p =>

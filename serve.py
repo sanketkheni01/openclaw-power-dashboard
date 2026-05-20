@@ -102,6 +102,40 @@ def _oauth_get_usage(access_token):
     resp = urllib.request.urlopen(req, timeout=15)
     return json.loads(resp.read())
 
+def _run_status(cmd, timeout=3, cwd=None):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd)
+    except Exception as e:
+        return type('Result', (), {'returncode': 1, 'stdout': '', 'stderr': str(e)})()
+
+
+def _gateway_user_systemctl(*args):
+    env = os.environ.copy()
+    env.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    return subprocess.run(['systemctl', '--user', *args], capture_output=True, text=True, timeout=12, env=env)
+
+
+def _service_status(name, cmd):
+    try:
+        result = cmd()
+        status = (result.stdout or result.stderr or '').strip().split('\n')[0] or ('active' if result.returncode == 0 else 'inactive')
+        active = result.returncode == 0 and status in ('active', 'running')
+        return {'name': name, 'status': status, 'active': active}
+    except Exception as e:
+        return {'name': name, 'status': f'unknown: {e}', 'active': False}
+
+
+def _tmux_session_active(session_name):
+    result = _run_status(['tmux', 'has-session', '-t', session_name])
+    return result.returncode == 0
+
+
+def _start_detached_command(cmd, log_path, cwd=None):
+    with open(log_path, 'ab', buffering=0) as log:
+        log.write(f"\n--- {datetime.now().isoformat()} ---\n$ {' '.join(cmd)}\n".encode())
+        return subprocess.Popen(cmd, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+
+
 def get_system_info():
     info = {}
     try:
@@ -198,26 +232,14 @@ def get_system_info():
         
         # Services
         svcs = []
-        # Check OpenClaw gateway process
-        try:
-            result = subprocess.run(['pgrep', '-f', 'openclaw-gateway'], capture_output=True, text=True, timeout=3)
-            active = result.returncode == 0
-            svcs.append({'name': 'openclaw-gateway', 'status': 'active' if active else 'inactive', 'active': active})
-        except:
-            svcs.append({'name': 'openclaw-gateway', 'status': 'unknown', 'active': False})
-        # Systemd services
+        svcs.append(_service_status('openclaw-gateway', lambda: _gateway_user_systemctl('is-active', 'openclaw-gateway')))
+        watch_active = _tmux_session_active('openclaw-gateway-watch-main')
+        svcs.append({'name': 'gateway-watch', 'status': 'active' if watch_active else 'inactive', 'active': watch_active})
         for svc in ['cozy-dashboard']:
-            try:
-                result = subprocess.run(['systemctl', 'is-active', svc], capture_output=True, text=True, timeout=3)
-                status = result.stdout.strip()
-                svcs.append({'name': svc, 'status': status, 'active': status == 'active'})
-            except:
-                svcs.append({'name': svc, 'status': 'unknown', 'active': False})
-        # Check tailscale
+            svcs.append(_service_status(svc, lambda svc=svc: _run_status(['systemctl', 'is-active', svc])))
         try:
-            result = subprocess.run(['tailscale', 'status', '--json'], capture_output=True, text=True, timeout=3)
-            active = result.returncode == 0
-            svcs.append({'name': 'tailscale', 'status': 'active' if active else 'inactive', 'active': active})
+            tailscale = _run_status(['tailscale', 'status', '--json'])
+            svcs.append({'name': 'tailscale', 'status': 'active' if tailscale.returncode == 0 else 'inactive', 'active': tailscale.returncode == 0})
         except:
             svcs.append({'name': 'tailscale', 'status': 'unknown', 'active': False})
         info['services'] = svcs
@@ -1773,17 +1795,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         if self.path == '/api/restart-gateway':
             try:
-                subprocess.Popen(['systemctl', 'restart', 'openclaw'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(b'{"status":"restarting"}')
+                proc = _start_detached_command(
+                    ['systemctl', '--user', 'restart', 'openclaw-gateway'],
+                    '/tmp/cozy-dashboard-gateway-restart.log'
+                )
+                self._json_response(200, {'status': 'restarting', 'pid': proc.pid, 'service': 'openclaw-gateway'})
                 return
             except Exception as e:
-                self.send_response(500)
-                self.send_header('Content-Type', 'application/json')
-                self.end_headers()
-                self.wfile.write(json.dumps({'error': str(e)}).encode())
+                self._json_response(500, {'error': str(e)})
+                return
+
+        if self.path == '/api/fix-gateway':
+            try:
+                proc = _start_detached_command(
+                    ['openclaw', 'doctor', '--fix', '--non-interactive'],
+                    '/tmp/cozy-dashboard-gateway-fix.log'
+                )
+                self._json_response(200, {'status': 'fixing', 'pid': proc.pid, 'log': '/tmp/cozy-dashboard-gateway-fix.log'})
+                return
+            except Exception as e:
+                self._json_response(500, {'error': str(e)})
+                return
+
+        if self.path == '/api/start-gateway-watch':
+            try:
+                proc = _start_detached_command(
+                    ['bash', '-lc', 'OPENCLAW_GATEWAY_WATCH_ATTACH=0 pnpm gateway:watch'],
+                    '/tmp/cozy-dashboard-gateway-watch.log',
+                    cwd='/root/openclaw'
+                )
+                self._json_response(200, {'status': 'starting', 'pid': proc.pid, 'service': 'gateway-watch', 'log': '/tmp/cozy-dashboard-gateway-watch.log'})
+                return
+            except Exception as e:
+                self._json_response(500, {'error': str(e)})
                 return
         
         if self.path == '/api/transcribe':
