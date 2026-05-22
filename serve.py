@@ -7,7 +7,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 PORT = 3847
-WS_PORT = 3848
+WS_PORT = 3850
 DIR = os.path.dirname(os.path.abspath(__file__))
 SESSIONS_FILE = '/root/.openclaw/agents/main/sessions/sessions.json'
 TOPIC_NAMES_FILE = os.path.join(DIR, 'topic-names.json')
@@ -727,6 +727,7 @@ class ReuseServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     allow_reuse_port = True
     daemon_threads = True
+    request_queue_size = 64
 
 def load_pinned():
     try:
@@ -2371,11 +2372,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-Encoding', 'gzip')
             self.send_header('Content-Length', str(len(compressed)))
             self.end_headers()
-            self.wfile.write(compressed)
+            try:
+                self.wfile.write(compressed)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
         else:
             self.send_header('Content-Length', str(len(raw)))
             self.end_headers()
-            self.wfile.write(raw)
+            try:
+                self.wfile.write(raw)
+            except (BrokenPipeError, ConnectionResetError):
+                pass
 
     def log_message(self, *a): pass
 

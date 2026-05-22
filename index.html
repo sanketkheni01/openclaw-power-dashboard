@@ -981,7 +981,7 @@ async function refreshTopicNames() {
 
 function initWebSocket() {
   try {
-    webSocket = new WebSocket(`ws://${window.location.hostname}:3848`);
+    webSocket = new WebSocket(`ws://${window.location.hostname}:3850`);
     webSocket.onopen = () => {
       document.getElementById('wsIndicator').classList.add('connected');
       document.getElementById('wsStatus').textContent = 'connected';
