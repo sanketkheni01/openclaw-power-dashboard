@@ -2059,7 +2059,7 @@ function buildLiveTicker(entries) {
   } else if (sessionStatus === 'running' && lastThinking) {
     stateClass = 'thinking';
     stateLabel = 'Thinking';
-    detail = (lastThinking.c.text || '').replace(/\s+/g, ' ').slice(0, 140);
+    detail = '';
     tsRef = lastThinking.ts;
   } else if (sessionStatus === 'running' && lastTool) {
     stateClass = 'running';
