@@ -2131,7 +2131,7 @@ function renderTranscript(entries) {
   });
   const renderedResults = new Set();
 
-  const orient = buildLiveTicker(entries);
+
 
   // Flight Recorder: flat rows keyed to a left time-spine. consecutive same-tool runs group.
   const blocks = [];
@@ -2313,7 +2313,7 @@ function renderTranscript(entries) {
   }).join('');
   const timeline = `<div class="tl">${rows}</div>`;
 
-  container.innerHTML = orient + `<div class="px-5 py-3">${timeline}</div>`;
+  container.innerHTML = `<div class="px-5 py-3">${timeline}</div>`;
   setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
   return; // skip old code path
 
