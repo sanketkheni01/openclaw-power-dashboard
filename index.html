@@ -2088,24 +2088,24 @@ function buildLiveTicker(entries) {
   for (const e of entries) for (const c of (e.content||[])) if (c.type === 'tool') stepCount++;
 
   const tone = {
-    running: { dot:'bg-led-green', text:'text-led-green', ring:'ring-led-green/15', live:true, verb:'Running' },
-    thinking:{ dot:'bg-led-violet', text:'text-led-violet', ring:'ring-led-violet/15', live:true, verb:'Thinking' },
-    error:   { dot:'bg-led-red', text:'text-led-red', ring:'ring-led-red/15', live:false, verb:'Error' },
-    idle:    { dot:'bg-ink-4', text:'text-ink-3', ring:'ring-white/5', live:false, verb:'Idle' },
-  }[stateClass] || { dot:'bg-ink-4', text:'text-ink-3', ring:'ring-white/5', live:false, verb:'Idle' };
-  const dotCls = `relative inline-block h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}${tone.live ? ' lt-dot-ping' : ''}`;
-  return `<div class="hero-now sticky top-0 z-10 flex items-center gap-3.5 border-b border-hair-mid bg-graphite px-5 py-3 shadow-panel" data-ts="${tsRef||0}" data-state="${stateClass}">
-    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-4 ${tone.ring} bg-panel"><span class="${dotCls}"></span></span>
+    running: { dot:'bg-amber', text:'text-amber', live:true, sub:'live · tool' },
+    thinking:{ dot:'bg-led-violet', text:'text-led-violet', live:true, sub:'reasoning' },
+    error:   { dot:'bg-led-red', text:'text-led-red', live:false, sub:'fault' },
+    idle:    { dot:'bg-ink-4', text:'text-ink-3', live:false, sub:'standby' },
+  }[stateClass] || { dot:'bg-ink-4', text:'text-ink-3', live:false, sub:'standby' };
+  const glyph = `relative h-3 w-3 shrink-0 rounded-full ${tone.dot}${tone.live ? ' lt-dot-ping' : ''}`;
+  return `<div class="hero-now sticky top-0 z-10 flex items-center gap-4 border-b border-hair-mid bg-graphite px-5 py-4 shadow-panel" data-ts="${tsRef||0}" data-state="${stateClass}">
+    <span class="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-panel ring-1 ring-hair-mid"><span class="${glyph}"></span></span>
     <div class="min-w-0 flex-1">
-      <div class="flex items-baseline gap-2">
-        <span class="lt-state text-[13px] font-semibold ${tone.text}">${stateLabel}</span>
-        <span class="font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">now</span>
+      <div class="flex items-baseline gap-2.5">
+        <span class="lt-state text-[15px] font-semibold ${tone.text}">${stateLabel}</span>
+        <span class="font-mono text-[10px] uppercase tracking-[.16em] text-ink-4">${tone.sub}</span>
       </div>
-      <div class="lt-detail truncate font-mono text-[12px] text-ink-2">${escapeHtml(detail) || '—'}</div>
+      <div class="lt-detail truncate font-mono text-[12.5px] text-ink-2">${escapeHtml(detail) || '—'}</div>
     </div>
     <div class="shrink-0 text-right">
-      <div class="lt-time font-mono text-[12px] tabular-nums ${tone.text}">${timeStr || '—'}</div>
-      <div class="font-mono text-[10px] text-ink-4">${stepCount} step${stepCount===1?'':'s'}</div>
+      <div class="lt-time font-mono text-[16px] font-semibold tabular-nums ${tone.text}">${timeStr || '—'}</div>
+      <div class="font-mono text-[10px] uppercase tracking-[.08em] text-ink-4">${stepCount} step${stepCount===1?'':'s'}</div>
     </div>
   </div>`;
 }
@@ -2133,29 +2133,30 @@ function renderTranscript(entries) {
 
   const orient = buildLiveTicker(entries);
 
-  // Build a flat HTML pass; user messages become banners, consecutive same-tool runs group.
+  // Flight Recorder: flat rows keyed to a left time-spine. consecutive same-tool runs group.
   const blocks = [];
-  let toolBuf = []; // {name, html, headlineShort}
+  let toolBuf = []; // {name, html, headlineShort, ts, ms, err}
   let toolBufName = null;
   const flushToolBuf = () => {
     if (!toolBuf.length) return;
     if (toolBuf.length >= 3) {
       const items = toolBuf.map(t => t.html).join('');
-      const headlines = toolBuf.map(t => t.headlineShort).filter(Boolean).slice(0,3).join('  ·  ');
+      const headlines = toolBuf.map(t => t.headlineShort).filter(Boolean).slice(0,4).join('  ·  ');
       const totalMs = toolBuf.reduce((a,t)=>a+(t.ms||0),0);
       const anyErr = toolBuf.some(t => t.err);
-      blocks.push({kind: anyErr?'err':'tools', html:`<div class="tool-group overflow-hidden rounded border border-hair" onclick="if(event.target.closest('.tg-head'))this.classList.toggle('open')">
-        <div class="tg-head flex cursor-pointer items-center gap-2.5 px-3 py-2 font-mono text-[11px] text-ink-2 hover:bg-panel">
-          <svg class="tg-caret-ic h-3 w-3 shrink-0 text-ink-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          <span class="shrink-0 font-medium text-ink">${escapeHtml(toolBufName)}</span>
-          <span class="shrink-0 tabular-nums ${anyErr?'text-led-red':'text-amber'}">×${toolBuf.length}</span>
-          <span class="min-w-0 flex-1 truncate text-ink-3">${escapeHtml(headlines)}</span>
-          ${totalMs ? `<span class="shrink-0 tabular-nums text-ink-4">${formatDuration(totalMs)}</span>` : ''}
+      const tagColor = toolTagColor(toolBufName);
+      blocks.push({kind: anyErr?'err':'tool', ts: toolBuf[0].ts, html:`<div class="tool-group rounded" onclick="if(event.target.closest('.tg-head'))this.classList.toggle('open')">
+        <div class="tg-head flex cursor-pointer items-baseline gap-2.5 rounded px-1 py-1.5 hover:bg-shelf">
+          <svg class="tg-caret-ic h-3 w-3 shrink-0 translate-y-[2px] text-ink-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          <span class="shrink-0 font-mono text-[10px] uppercase tracking-[.1em] ${tagColor}">${escapeHtml(toolBufName)}</span>
+          <span class="shrink-0 font-mono text-[10px] tabular-nums ${anyErr?'text-led-red':'text-amber'}">×${toolBuf.length}</span>
+          <span class="min-w-0 flex-1 truncate font-mono text-[11.5px] text-ink-3">${escapeHtml(headlines)}</span>
+          ${totalMs ? `<span class="shrink-0 font-mono text-[10px] tabular-nums text-ink-4">${formatDuration(totalMs)}</span>` : ''}
         </div>
-        <div class="tg-body px-2.5 pb-2">${items}</div>
+        <div class="tg-body space-y-0.5 pl-5">${items}</div>
       </div>`});
     } else {
-      toolBuf.forEach(t => blocks.push({kind: t.err?'err':'tool', html: t.html}));
+      toolBuf.forEach(t => blocks.push({kind: t.err?'err':'tool', ts: t.ts, html: t.html}));
     }
     toolBuf = []; toolBufName = null;
   };
@@ -2168,10 +2169,8 @@ function renderTranscript(entries) {
     if (role === 'user' && entryContent.some(c => c.type === 'text')) {
       flushToolBuf();
       const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n');
-      blocks.push({kind:'user', html:`<div class="rounded-lg border border-amber/25 bg-amber/[.05] px-4 py-3">
-        <div class="mb-1.5 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[.1em]">
-          <span class="font-semibold text-amber">You</span><span class="text-ink-4">${formatTimestamp(entry.ts)}</span>
-        </div>
+      blocks.push({kind:'user', ts: entry.ts, html:`<div class="border-l-2 border-amber bg-amber/[.05] py-2.5 pl-3 pr-2">
+        <div class="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-amber">You</div>
         <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
       </div>`});
       continue;
@@ -2196,16 +2195,16 @@ function renderTranscript(entries) {
         // Orphan result, render inline
         const isErr = c.isError || /^error[:\s]/i.test((c.text||'').slice(0,80));
         flushToolBuf();
-        blocks.push({kind: isErr?'err':'tool', html:`<div class="overflow-hidden rounded border border-hair bg-panel">
-          <div class="flex items-center gap-2.5 px-2.5 py-1.5">
-            <span class="h-[6px] w-[6px] shrink-0 rounded-full ${isErr?'bg-led-red':'bg-led-green'}"></span>
-            <span class="shrink-0 font-mono text-[11px] text-ink-4">${escapeHtml(c.name || 'result')}</span>
+        blocks.push({kind: isErr?'err':'tool', ts: c.ts || entry.ts, html:`<div class="rounded bg-shelf">
+          <div class="flex items-baseline gap-2.5 px-1 py-1.5">
+            <span class="h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full ${isErr?'bg-led-red':'bg-led-green'}"></span>
+            <span class="shrink-0 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">${escapeHtml(c.name || 'result')}</span>
           </div>
-          <div class="border-t border-hair px-3 py-2">${renderToolResultBody(c.name, c.text||'', isErr)}</div>
+          <div class="border-t border-hair px-2 py-2">${renderToolResultBody(c.name, c.text||'', isErr)}</div>
         </div>`});
       } else if (c.type === 'image') {
         flushToolBuf();
-        blocks.push({kind:'tool', html:`<img class="max-h-80 cursor-pointer rounded border border-hair" src="${escapeHtml(c.url)}" onclick="window.open('${escapeHtml(c.url)}','_blank')" onerror="this.outerHTML='<span class=text-ink-4>Image: '+this.src+'</span>'" />`});
+        blocks.push({kind:'tool', ts: c.ts || entry.ts, html:`<img class="max-h-80 cursor-pointer rounded border border-hair" src="${escapeHtml(c.url)}" onclick="window.open('${escapeHtml(c.url)}','_blank')" onerror="this.outerHTML='<span class=text-ink-4>Image: '+this.src+'</span>'" />`});
       }
     }
 
@@ -2214,14 +2213,14 @@ function renderTranscript(entries) {
       flushToolBuf();
       let inner = '';
       for (const t of entryThinking) {
-        const preview = t.replace(/\s+/g,' ').slice(0, 120);
-        inner += `<div class="thinking-block my-1.5" onclick="this.classList.toggle('open')">
-          <div class="tk-head flex cursor-pointer items-center gap-2 py-0.5 text-ink-4 hover:text-ink-2">
-            <span class="shrink-0 font-mono text-[10px] uppercase tracking-[.08em] text-led-violet/70">Think</span>
-            <span class="tk-preview min-w-0 flex-1 truncate text-[11.5px] italic">${escapeHtml(preview)}${t.length>120?'…':''}</span>
+        const preview = t.replace(/\s+/g,' ').slice(0, 130);
+        inner += `<div class="thinking-block mb-1.5" onclick="this.classList.toggle('open')">
+          <div class="tk-head flex cursor-pointer items-center gap-2 py-0.5 text-ink-4 hover:text-ink-3">
+            <span class="shrink-0 font-mono text-[9px] uppercase tracking-[.14em] text-led-violet/55">think</span>
+            <span class="tk-preview min-w-0 flex-1 truncate font-mono text-[11px] italic">${escapeHtml(preview)}${t.length>130?'…':''}</span>
             <svg class="tk-caret h-2.5 w-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
           </div>
-          <div class="tk-body ml-[5px] whitespace-pre-wrap border-l border-hair py-1.5 pl-4 text-[12.5px] leading-relaxed text-ink-3">${escapeHtml(t)}</div>
+          <div class="tk-body ml-[3px] whitespace-pre-wrap border-l border-hair py-1.5 pl-3 text-[12px] leading-relaxed text-ink-3">${escapeHtml(t)}</div>
         </div>`;
       }
       for (const tx of entryText) {
@@ -2235,12 +2234,10 @@ function renderTranscript(entries) {
         if (entry.tokens.cache) metaHtml.push(`${entry.tokens.cache} cached`);
       }
       const label = role === 'assistant' ? 'Cozy' : role.charAt(0).toUpperCase()+role.slice(1);
-      const hasText = entryText.length > 0;
-      blocks.push({kind:'say', html:`<div class="log-entry rounded-lg border border-hair bg-panel/40 px-4 py-3">
-        <div class="mb-2 flex items-baseline gap-2.5">
-          <span class="font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-led-violet/80">${label}</span>
-          <span class="font-mono text-[10px] text-ink-4">${formatTimestamp(entry.ts)}</span>
-          ${metaHtml.length ? `<span class="ml-auto cursor-default font-mono text-[10px] text-ink-4/50 hover:text-ink-3" title="${metaHtml.join('  ·  ')}">${escapeHtml(entry.model||'')}</span>` : ''}
+      blocks.push({kind:'say', ts: entry.ts, html:`<div class="log-entry py-1">
+        <div class="mb-1.5 flex items-baseline gap-2.5">
+          <span class="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-led-violet/90">${label}</span>
+          ${metaHtml.length ? `<span class="ml-auto cursor-default font-mono text-[9px] text-ink-4/50 hover:text-ink-3" title="${metaHtml.join('  ·  ')}">${escapeHtml(entry.model||'')}</span>` : ''}
         </div>
         ${inner}
       </div>`});
@@ -2252,35 +2249,36 @@ function renderTranscript(entries) {
       const argsPretty = JSON.stringify(c.args || {}, null, 2);
       const headline = toolHeadline(c.name, c.args);
       const headlineShort = headline === c.name ? '' : (headline.length > 60 ? headline.slice(0,60)+'…' : headline);
+      const tagColor = toolTagColor(c.name);
       let dotCls, durHtml = '', summaryHtml = '', resultHtml, ms = 0, isErr = false;
       if (result) {
         renderedResults.add(c.id);
-        if (c.ts && result.ts) { ms = Math.max(0, result.ts - c.ts); durHtml = `<span class="shrink-0 tabular-nums font-mono text-[11px] text-ink-4">${formatDuration(ms)}</span>`; }
+        if (c.ts && result.ts) { ms = Math.max(0, result.ts - c.ts); durHtml = `<span class="shrink-0 tabular-nums font-mono text-[10px] text-ink-4">${formatDuration(ms)}</span>`; }
         isErr = result.isError || /^error[:\s]/i.test((result.text||'').slice(0,80));
         dotCls = isErr ? 'bg-led-red' : 'bg-led-green';
         const sum = summarizeToolResult(c.name, result.text || '', isErr);
-        if (sum) summaryHtml = `<span class="shrink-0 font-mono text-[11px] tabular-nums ${sum.klass==='exit-nonzero'?'text-led-red':'text-ink-4'}">${escapeHtml(sum.text)}</span>`;
-        resultHtml = `<div class="tc-body border-t border-hair">
-          <div class="border-b border-hair px-3 py-2"><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
-          <div class="px-3 py-2">
-            <div class="mb-1.5 flex items-center justify-between">
-              <span class="font-mono text-[9px] uppercase tracking-[.08em] text-ink-4">${isErr?'error':'result'}</span>
+        if (sum) summaryHtml = `<span class="shrink-0 font-mono text-[10px] tabular-nums ${sum.klass==='exit-nonzero'?'text-led-red':'text-ink-4'}">${escapeHtml(sum.text)}</span>`;
+        resultHtml = `<div class="tc-body mt-1.5 ml-4">
+          <div class="rounded border border-hair bg-root/60 px-2.5 py-2"><div class="mb-1 font-mono text-[9px] uppercase tracking-[.14em] text-ink-4">args</div><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
+          <div class="mt-1 rounded border border-hair bg-root/60 px-2.5 py-2">
+            <div class="mb-1 flex items-center justify-between">
+              <span class="font-mono text-[9px] uppercase tracking-[.14em] ${isErr?'text-led-red':'text-ink-4'}">${isErr?'error':'stdout'}</span>
               <button class="font-mono text-[9px] text-ink-4 hover:text-amber" onclick="event.stopPropagation();copyText(${JSON.stringify(result.text||'').replace(/</g,'\\u003c')})">copy</button>
             </div>
             ${renderToolResultBody(c.name, result.text || '', isErr)}
           </div>
         </div>`;
       } else {
-        dotCls = 'bg-amber animate-pulse';
-        resultHtml = `<div class="tc-body border-t border-hair">
-          <div class="px-3 py-2"><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
-          <div class="px-3 py-2 font-mono text-[11px] text-amber">running…</div>
+        dotCls = 'bg-amber lt-dot-ping relative';
+        summaryHtml = `<span class="shrink-0 font-mono text-[10px] text-amber">running…</span>`;
+        resultHtml = `<div class="tc-body mt-1.5 ml-4">
+          <div class="rounded border border-hair bg-root/60 px-2.5 py-2"><div class="mb-1 font-mono text-[9px] uppercase tracking-[.14em] text-ink-4">args</div><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
         </div>`;
       }
-      const toolHtml = `<div class="tool-call my-0.5 cursor-pointer overflow-hidden rounded hover:bg-panel" onclick="toggleToolCall(this)">
-        <div class="flex items-center gap-2.5 px-2.5 py-1.5">
-          <span class="h-[6px] w-[6px] shrink-0 rounded-full ${dotCls}"></span>
-          <span class="shrink-0 font-mono text-[11px] text-ink-4">${escapeHtml(c.name)}</span>
+      const toolHtml = `<div class="tool-call cursor-pointer rounded px-1 py-1.5 hover:bg-shelf" onclick="toggleToolCall(this)">
+        <div class="flex items-baseline gap-2.5">
+          <span class="h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full ${dotCls}"></span>
+          <span class="shrink-0 font-mono text-[10px] uppercase tracking-[.1em] ${tagColor}">${escapeHtml(c.name)}</span>
           <span class="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">${escapeHtml(headline)}</span>
           ${summaryHtml}
           ${durHtml}
@@ -2290,31 +2288,32 @@ function renderTranscript(entries) {
 
       if (toolBufName && toolBufName !== c.name) flushToolBuf();
       toolBufName = c.name;
-      toolBuf.push({ name: c.name, html: toolHtml, headlineShort, ms, err: isErr });
+      toolBuf.push({ name: c.name, html: toolHtml, headlineShort, ms, err: isErr, ts: c.ts || entry.ts });
     }
   }
   flushToolBuf();
 
-  // Wrap each block as a timeline row: a spine node + the content card.
-  const nodeTone = {
-    user:  'bg-amber ring-amber/20',
-    say:   'bg-led-violet/80 ring-led-violet/20',
-    tool:  'bg-led-green ring-led-green/20',
-    tools: 'bg-led-green ring-led-green/20',
-    err:   'bg-led-red ring-led-red/20',
-  };
+  // Flight Recorder assembly: a 2-col grid [time-spine | content].
+  // The left edge is a monospace clock column; a hairline runs down between.
+  // Time text only prints when the clock value changes (collapses dense bursts).
+  const timeColor = { user:'text-amber/70', say:'text-led-violet/60', err:'text-led-red/70' };
+  let lastClock = '';
   const rows = blocks.map(b => {
-    const dot = nodeTone[b.kind] || 'bg-ink-4 ring-white/5';
-    const big = (b.kind === 'user' || b.kind === 'say');
-    const sz = big ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5';
-    return `<div class="tl-row relative pl-9">
-      <span class="absolute left-[11px] top-3.5 ${sz} -translate-x-1/2 rounded-full ring-4 ${dot}"></span>
-      <div class="py-1.5">${b.html}</div>
+    const clock = fmtClock(b.ts);
+    const showTime = clock && clock !== lastClock;
+    if (clock) lastClock = clock;
+    const tc = timeColor[b.kind] || 'text-ink-4';
+    const timeCell = showTime
+      ? `<div class="pt-1.5 pr-3 text-right font-mono text-[10px] tabular-nums ${tc}">${clock}</div>`
+      : `<div></div>`;
+    return `<div class="tl-row grid grid-cols-[56px_1fr] items-start">
+      ${timeCell}
+      <div class="min-w-0 border-l border-hair pl-3.5">${b.html}</div>
     </div>`;
   }).join('');
-  const timeline = `<div class="tl relative"><span class="absolute left-[11px] top-0 bottom-0 w-px bg-hair"></span>${rows}</div>`;
+  const timeline = `<div class="tl">${rows}</div>`;
 
-  container.innerHTML = orient + `<div class="px-5 py-4">${timeline}</div>`;
+  container.innerHTML = orient + `<div class="px-5 py-3">${timeline}</div>`;
   setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
   return; // skip old code path
 
@@ -2729,6 +2728,25 @@ function formatTime(timestamp) {
 function formatTimestamp(timestamp) {
   if (!timestamp) return '';
   return new Date(typeof timestamp === 'number' ? timestamp : timestamp).toLocaleString();
+}
+
+// Flight Recorder: clock-style time for the left spine column
+function fmtClock(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const p = n => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+
+// Tool-name → tag color (one accent family per tool class)
+function toolTagColor(name) {
+  const n = (name || '').toLowerCase();
+  if (/read|cat|grep|glob|ls|knowledge/.test(n)) return 'text-led-blue';
+  if (/exec|bash|shell|run|systemctl/.test(n)) return 'text-amber';
+  if (/write|edit|create|patch/.test(n)) return 'text-led-green';
+  if (/browser|web|fetch|search|navigate/.test(n)) return 'text-led-violet';
+  if (/message|send|telegram|discord|task/.test(n)) return 'text-led-blue';
+  return 'text-ink-3';
 }
 
 function getTotalCost(session) {
