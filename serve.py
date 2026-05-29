@@ -131,9 +131,28 @@ def _tmux_session_active(session_name):
 
 
 def _start_detached_command(cmd, log_path, cwd=None):
+    """Launch a long-running helper detached from the dashboard.
+
+    The helper runs inside its own transient systemd scope so its memory is
+    charged to a separate cgroup rather than cozy-dashboard.service's. Heavy
+    helpers like `openclaw doctor` (~350MB) would otherwise blow the service's
+    MemoryHigh/Max cap and throttle the entire dashboard into unresponsiveness.
+    Falls back to a plain detached spawn if systemd-run is unavailable.
+    """
+    import re
     with open(log_path, 'ab', buffering=0) as log:
         log.write(f"\n--- {datetime.now().isoformat()} ---\n$ {' '.join(cmd)}\n".encode())
-        return subprocess.Popen(cmd, cwd=cwd, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        unit = re.sub(r'[^A-Za-z0-9:_.\-]', '_',
+                      f"cozy-spawn-{os.path.basename(cmd[0])}-{int(time.time())}-{secrets.token_hex(2)}")
+        wrapped = ['systemd-run', '--scope', '--collect', '--expand-environment=no',
+                   f'--unit={unit}', '--property=MemoryMax=1G', *cmd]
+        try:
+            return subprocess.Popen(wrapped, cwd=cwd, stdout=log,
+                                    stderr=subprocess.STDOUT, start_new_session=True)
+        except FileNotFoundError:
+            log.write(b"[cozy] systemd-run not found; running without cgroup isolation\n")
+            return subprocess.Popen(cmd, cwd=cwd, stdout=log,
+                                    stderr=subprocess.STDOUT, start_new_session=True)
 
 
 def get_system_info():
@@ -359,7 +378,7 @@ async def _gateway_send_message(session_key: str, message: str) -> dict:
             await ws.send(json.dumps({
                 'type': 'req', 'id': '1', 'method': 'connect',
                 'params': {
-                    'minProtocol': 3, 'maxProtocol': 3,
+                    'minProtocol': 4, 'maxProtocol': 4,
                     'client': {'id': 'openclaw-control-ui', 'mode': 'ui', 'version': '1.0', 'platform': 'linux'},
                     'scopes': ['operator.admin', 'operator.write'],
                     'auth': {'token': token}
@@ -704,6 +723,13 @@ PINNED_FILE = os.path.join(DIR, 'pinned.json')
 
 # WebSocket clients for real-time updates
 ws_clients = set()
+ws_loop = None
+
+# Gateway live-session bridge state.  The dashboard keeps file reads/watchers as
+# source-of-truth + fallback, but prefers OpenClaw Gateway session events when
+# the local gateway is reachable.
+gateway_live_state = {'connected': False, 'last_error': None, 'updated_at': 0}
+_gateway_live_lock = threading.Lock()
 
 # SSE clients for log streaming (list of queue objects)
 import queue
@@ -2000,6 +2026,22 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 self.wfile.write(f.read())
             return
 
+        if self.path == '/cron' or self.path == '/cron/':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            with open(os.path.join(DIR, 'cron.html'), 'rb') as f:
+                self.wfile.write(f.read())
+            return
+
+        if self.path == '/system' or self.path == '/system/':
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html')
+            self.end_headers()
+            with open(os.path.join(DIR, 'system.html'), 'rb') as f:
+                self.wfile.write(f.read())
+            return
+
         # ── Anthropic API Key Settings (GET) ──
         if self.path.startswith('/api/settings/anthropic-key'):
             try:
@@ -2390,6 +2432,15 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 async def websocket_handler(websocket):
     ws_clients.add(websocket)
     try:
+        with _gateway_live_lock:
+            state = dict(gateway_live_state)
+        await websocket.send(json.dumps({
+            'type': 'gateway_live_status',
+            'connected': state.get('connected', False),
+            'mode': 'live' if state.get('connected') else 'degraded',
+            'error': state.get('last_error'),
+            'timestamp': state.get('updated_at', 0) * 1000,
+        }))
         await websocket.wait_closed()
     finally:
         ws_clients.remove(websocket)
@@ -2400,6 +2451,174 @@ async def broadcast_update(message):
             *[ws.send(message) for ws in ws_clients.copy()],
             return_exceptions=True
         )
+
+
+def _dashboard_broadcast(obj):
+    """Thread-safe broadcast into the dashboard websocket server."""
+    loop = globals().get('ws_loop')
+    if loop is None or not loop.is_running():
+        return
+    try:
+        asyncio.run_coroutine_threadsafe(broadcast_update(json.dumps(obj)), loop)
+    except Exception:
+        pass
+
+
+def _set_gateway_live_status(connected, error=None):
+    with _gateway_live_lock:
+        changed = gateway_live_state.get('connected') != connected or gateway_live_state.get('last_error') != error
+        gateway_live_state.update({'connected': connected, 'last_error': error, 'updated_at': time.time()})
+    if changed:
+        _dashboard_broadcast({
+            'type': 'gateway_live_status',
+            'connected': connected,
+            'mode': 'live' if connected else 'degraded',
+            'error': error,
+            'timestamp': time.time() * 1000,
+        })
+
+
+def _normalize_live_content(content):
+    if isinstance(content, str):
+        return [{'type': 'text', 'text': content[:5000]}]
+    if not isinstance(content, list):
+        return []
+    parsed = []
+    for c in content:
+        if not isinstance(c, dict):
+            continue
+        t = c.get('type', '')
+        if t in ('text', 'input_text', 'output_text'):
+            txt = c.get('text') or c.get('content') or ''
+            if txt:
+                parsed.append({'type': 'text', 'text': str(txt)[:5000]})
+        elif t in ('thinking', 'reasoning'):
+            txt = c.get('thinking') or c.get('text') or ''
+            if txt:
+                parsed.append({'type': 'thinking', 'text': str(txt)[:3000]})
+        elif t in ('toolCall', 'tool_call', 'toolUse', 'tool_use'):
+            args = c.get('arguments', c.get('args', {}))
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except Exception:
+                    args = {'raw': args[:2000]}
+            parsed.append({'type': 'tool', 'name': c.get('name', c.get('toolName', '?')), 'args': args if isinstance(args, dict) else {}, 'id': c.get('id', c.get('toolCallId', ''))})
+        elif t in ('toolResult', 'tool_result'):
+            txt = c.get('text') or c.get('content') or c.get('result') or ''
+            if not isinstance(txt, str):
+                try:
+                    txt = json.dumps(txt, ensure_ascii=False)
+                except Exception:
+                    txt = str(txt)
+            parsed.append({'type': 'result', 'name': c.get('name', c.get('toolName', '?')), 'text': txt[:4000], 'id': c.get('id', c.get('toolCallId', ''))})
+        elif t == 'image':
+            src = c.get('source', {}) if isinstance(c.get('source'), dict) else {}
+            url = src.get('url', '') or c.get('url', '') or c.get('image', '')
+            parsed.append({'type': 'image', 'url': url})
+    return parsed
+
+
+def parse_gateway_live_message(payload):
+    msg = payload.get('message') if isinstance(payload, dict) else None
+    if not isinstance(msg, dict):
+        return None
+    content = _normalize_live_content(msg.get('content', []))
+    if not content:
+        text = msg.get('text') or msg.get('message')
+        if text:
+            content = [{'type': 'text', 'text': str(text)[:5000]}]
+    if not content:
+        return None
+    usage = msg.get('usage', {}) if isinstance(msg.get('usage'), dict) else {}
+    cost = usage.get('cost', {}) if isinstance(usage.get('cost'), dict) else {}
+    return {
+        'role': msg.get('role') or payload.get('role') or 'system',
+        'model': msg.get('model', ''),
+        'stop': msg.get('stopReason', msg.get('stop', '')),
+        'ts': msg.get('timestamp') or payload.get('ts') or time.time() * 1000,
+        'cost': cost.get('total', 0) or usage.get('costUsd', 0) or 0,
+        'tokens': {
+            'in': usage.get('input', usage.get('inputTokens', 0)) or 0,
+            'out': usage.get('output', usage.get('outputTokens', 0)) or 0,
+            'cache': usage.get('cacheRead', 0) or 0,
+        },
+        'content': content,
+        '_liveMessageId': payload.get('messageId'),
+        '_liveMessageSeq': payload.get('messageSeq'),
+    }
+
+
+async def _gateway_live_bridge_once():
+    token = _get_gateway_token()
+    port = _get_gateway_port()
+    if not token:
+        raise RuntimeError('gateway token not found')
+    uri = f'ws://127.0.0.1:{port}'
+    async with websockets.connect(
+        uri,
+        additional_headers={'Origin': f'http://127.0.0.1:{port}'},
+        open_timeout=5,
+        ping_interval=20,
+        ping_timeout=20,
+    ) as ws:
+        await asyncio.wait_for(ws.recv(), timeout=5.0)  # connect.challenge
+        await ws.send(json.dumps({
+            'type': 'req', 'id': 'live-connect', 'method': 'connect',
+            'params': {
+                'minProtocol': 4, 'maxProtocol': 4,
+                'client': {'id': 'openclaw-control-ui', 'mode': 'ui', 'version': '1.0', 'platform': 'linux'},
+                'scopes': ['operator.read'],
+                'auth': {'token': token},
+            },
+        }))
+        connected = False
+        while not connected:
+            frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=5.0))
+            if frame.get('type') == 'res' and frame.get('id') == 'live-connect':
+                if not frame.get('ok'):
+                    err = frame.get('error', {}) if isinstance(frame.get('error'), dict) else {}
+                    raise RuntimeError(err.get('message') or 'gateway connect failed')
+                connected = True
+        await ws.send(json.dumps({'type': 'req', 'id': 'sessions-subscribe', 'method': 'sessions.subscribe', 'params': {}}))
+        _set_gateway_live_status(True)
+        while True:
+            frame = json.loads(await ws.recv())
+            if frame.get('type') != 'event':
+                continue
+            event = frame.get('event')
+            payload = frame.get('payload') or {}
+            if event == 'session.message':
+                entry = parse_gateway_live_message(payload)
+                _dashboard_broadcast({
+                    'type': 'gateway_session_message',
+                    'payload': payload,
+                    'entry': entry,
+                    'sessionKey': payload.get('sessionKey'),
+                    'sessionId': payload.get('sessionId') or ((payload.get('session') or {}).get('sessionId') if isinstance(payload.get('session'), dict) else None),
+                    'messageId': payload.get('messageId'),
+                    'messageSeq': payload.get('messageSeq'),
+                    'timestamp': time.time() * 1000,
+                })
+            elif event == 'sessions.changed':
+                with _sessions_cache_lock:
+                    _sessions_cache['data'] = None
+                _dashboard_broadcast({'type': 'gateway_sessions_changed', 'payload': payload, 'timestamp': time.time() * 1000})
+
+
+def _gateway_live_bridge_loop():
+    while True:
+        try:
+            asyncio.run(_gateway_live_bridge_once())
+        except Exception as e:
+            _set_gateway_live_status(False, str(e)[:200])
+            time.sleep(5)
+
+
+def start_gateway_live_bridge():
+    t = threading.Thread(target=_gateway_live_bridge_loop, daemon=True, name='gateway-live-bridge')
+    t.start()
+    return t
 
 # Log file watcher for live tail
 class LogFileWatcher(FileSystemEventHandler):
@@ -2506,6 +2725,10 @@ if __name__ == "__main__":
     # Start WebSocket server in background thread
     ws_thread = threading.Thread(target=start_websocket_server, daemon=True)
     ws_thread.start()
+
+    # Start the read-only OpenClaw Gateway live-session bridge.  If it cannot
+    # connect or auth, the existing file watcher/polling path remains active.
+    start_gateway_live_bridge()
     
     try:
         with ReuseServer(('127.0.0.1', PORT), Handler) as s:

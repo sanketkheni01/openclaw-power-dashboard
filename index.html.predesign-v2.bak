@@ -7,16 +7,76 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<!-- Centralized design tokens + shared chrome (single source of truth). -->
-<link rel="stylesheet" href="/cozy-theme.css">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <!-- Tailwind Play CDN: no build step (matches this static, no-tooling dashboard).
      Preflight disabled so it can't reset the shipped operator design; runtime
-     JS-generated component classes (.session-card/.badge-*/.role-*) stay in <style>.
-     Theme tokens come from the shared config so every page stays in sync. -->
+     JS-generated component classes (.session-card/.badge-*/.role-*) stay in <style>. -->
 <script src="https://cdn.tailwindcss.com/3.4.16"></script>
-<script src="/cozy-tailwind.js"></script>
+<script>
+  tailwind.config = {
+    corePlugins: { preflight: false },
+    theme: {
+      extend: {
+        colors: {
+          root:'var(--bg-root)', graphite:'var(--bg-primary)', panel:'var(--bg-secondary)',
+          shelf:'var(--bg-tertiary)', raised:'var(--bg-elevated)',
+          ink:'var(--text-primary)', 'ink-2':'var(--text-secondary)',
+          'ink-3':'var(--text-tertiary)', 'ink-4':'var(--text-muted)',
+          amber:'var(--accent)', 'amber-soft':'var(--accent-soft)',
+          led:{green:'var(--green)', yellow:'var(--yellow)', red:'var(--red)', blue:'var(--blue)', violet:'var(--violet)'},
+        },
+        fontFamily: {
+          display:['Space Grotesk','sans-serif'],
+          sans:['Space Grotesk','sans-serif'],
+          mono:['JetBrains Mono','ui-monospace','monospace'],
+        },
+        borderColor: { hair:'var(--border)', 'hair-mid':'var(--border-mid)', 'hair-bright':'var(--border-bright)' },
+        borderRadius: { sm:'var(--radius-sm)', DEFAULT:'var(--radius)', lg:'var(--radius-lg)', xl:'var(--radius-xl)' },
+      },
+    },
+  };
+</script>
 <style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+
+:root{
+  /* Surfaces — Industrial operator console (graphite hull) */
+  --bg-root:#070809;
+  --bg-primary:#0b0d10;
+  --bg-secondary:#11141a;
+  --bg-tertiary:#171b22;
+  --bg-elevated:#1d222b;
+  /* Borders — alpha hairlines on graphite */
+  --border:rgba(233,236,242,.055);
+  --border-mid:rgba(233,236,242,.10);
+  --border-bright:rgba(233,236,242,.16);
+  --border-focus:rgba(229,149,74,.45);
+  /* Text — 4-level hierarchy, warm graphite neutrals */
+  --text-primary:#e8eaef;
+  --text-secondary:#9aa1ad;
+  --text-tertiary:#646b78;
+  --text-muted:#434a56;
+  /* Accent — signal amber */
+  --accent:#e5954a;
+  --accent-soft:#f0b072;
+  --accent-dim:rgba(229,149,74,.10);
+  /* Status — instrument LEDs */
+  --green:#4ade80;
+  --yellow:#facc15;
+  --red:#f87171;
+  --blue:#60a5fa;
+  --violet:#c084fc;
+  /* Type */
+  --display:'Space Grotesk','Segoe UI',sans-serif;
+  --sans:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,monospace;
+  /* Shape — sharp, technical */
+  --radius-sm:3px;
+  --radius:4px;
+  --radius-lg:6px;
+  --radius-xl:8px;
+}
+
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:0.01ms!important;transition-duration:0.01ms!important}
 }
@@ -575,201 +635,6 @@ body{
 /* Menu items hover */
 .menu-item:hover{background:var(--bg-tertiary)!important}
 
-/* ============================================================================
-   UX REDESIGN — sidebar / session-viewer / subagent-viewer / tool-call view
-   Additive layer; overrides the earlier display:none kills selectively.
-   ============================================================================ */
-
-/* —— Sidebar: search and filter REMOVED (per Sanket); rely on sort + tabs —— */
-.toolbar,.filter-bar{display:none!important}
-
-/* —— Session card: re-enable activity for running sessions, improve hierarchy —— */
-.session-card{padding:11px 16px 12px!important}
-.session-card .activity-section{display:block!important;margin-top:6px;padding-left:15px}
-.session-card:not(.session-running) .activity-section{display:none!important}
-.session-card .activity-item{font-size:10.5px;color:var(--text-tertiary);display:flex;gap:6px;align-items:baseline;padding:1px 0;line-height:1.35}
-.session-card .activity-action{color:var(--accent);font-weight:500;letter-spacing:0;text-transform:none;font-size:10px;flex-shrink:0;font-family:var(--mono)}
-.session-card .activity-detail{color:var(--text-secondary);font-size:10.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono)}
-.session-card .activity-time{font-size:9.5px;color:var(--text-muted);margin-left:auto}
-.session-card .card-preview{font-size:11.5px!important;color:var(--text-tertiary)!important;line-height:1.45!important;margin-top:5px!important}
-.session-running .card-preview{color:var(--text-secondary)!important}
-.session-card .status-dot.status-running{box-shadow:0 0 0 2px rgba(74,222,128,.18),0 0 8px rgba(74,222,128,.55)!important}
-.session-card.live-flash{animation:row-live-flash 1.4s ease-out}
-@keyframes row-live-flash{0%{background:rgba(229,149,74,.12)}100%{background:transparent}}
-
-/* —— Detail panel meta: cleaner separators —— */
-.panel-meta{font-size:11.5px!important;padding:9px 20px!important;gap:14px!important}
-.panel-meta span{display:inline-flex;align-items:center;gap:5px}
-.panel-meta .badge{font-size:9.5px}
-
-/* —— Transcript: minimal log entries, no left rail, restraint —— */
-.log-entry{margin:16px 0!important;padding:0!important;border:0!important;background:transparent!important;position:relative}
-.log-entry.live-new{animation:msg-live 1.6s ease-out}
-@keyframes msg-live{0%{background:rgba(229,149,74,.08)}100%{background:transparent}}
-.log-header{margin-bottom:6px!important;gap:10px!important;align-items:baseline}
-.log-role{font-size:10px!important;padding:0!important;background:transparent!important;letter-spacing:.08em!important;color:var(--text-muted)!important;font-family:var(--mono);text-transform:uppercase;font-weight:500}
-.log-entry.role-assistant .log-role{color:var(--text-tertiary)!important}
-.log-entry.role-user .log-role{color:var(--accent)!important}
-.log-entry.role-tool .log-role{color:var(--text-muted)!important}
-.log-timestamp{font-size:10.5px!important;color:var(--text-muted)!important;font-family:var(--mono)}
-.log-text{font-size:13.5px!important;line-height:1.6!important;color:var(--text-primary)}
-.log-text p{margin:6px 0!important}
-.log-text code{font-family:var(--mono);font-size:12px;background:var(--bg-secondary);padding:1px 5px;border-radius:3px}
-.log-text pre{background:var(--bg-secondary);padding:10px 12px;border-radius:var(--radius);overflow-x:auto;margin:8px 0;border:0}
-.log-text pre code{background:transparent;padding:0;font-size:12px;line-height:1.55}
-.log-meta{font-size:10.5px;color:var(--text-muted);font-family:var(--mono);margin-top:6px;opacity:.7}
-.log-meta:hover{opacity:1}
-
-/* —— Thinking blocks: borderless, italic-muted, click to expand —— */
-.thinking-block{
-  background:transparent!important;border:0!important;
-  padding:0!important;margin:6px 0!important;
-  overflow:hidden;
-}
-.thinking-header{
-  display:flex;align-items:center;gap:8px;
-  padding:2px 0;cursor:pointer;
-  color:var(--text-muted);font-size:11px;
-  font-family:var(--sans);font-style:italic;
-  transition:color .12s;
-}
-.thinking-header:hover{color:var(--text-secondary)}
-.thinking-header .think-icon{width:11px;height:11px;color:rgba(192,132,252,.55);flex-shrink:0;font-style:normal}
-.thinking-header > span:nth-of-type(1){font-style:normal;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);flex-shrink:0}
-.thinking-header .think-caret{font-size:9px;color:var(--text-muted);transition:transform .12s;flex-shrink:0;font-style:normal}
-.thinking-block.open .think-caret{transform:rotate(90deg)}
-.thinking-body{display:none;padding:6px 0 6px 19px;white-space:pre-wrap;line-height:1.6;color:var(--text-tertiary);font-family:var(--sans);font-size:12.5px;border-left:1px solid var(--border);margin-left:5px}
-.thinking-block.open .thinking-body{display:block}
-.thinking-preview{color:var(--text-muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-transform:none;letter-spacing:0;font-family:var(--sans);font-size:11.5px;font-style:italic}
-.thinking-block.open .thinking-preview{display:none}
-
-/* —— Tool calls: borderless rows, hover-fill, restraint —— */
-.tool-call{margin:2px 0!important;border:0!important;border-radius:4px!important;background:transparent!important;transition:background .12s}
-.tool-call:hover{background:var(--bg-secondary)!important}
-.tool-call.expanded{background:var(--bg-secondary)!important}
-.tool-header{padding:5px 10px!important;gap:10px;flex-wrap:nowrap!important;background:transparent!important;border:0!important;align-items:center}
-.tool-call.expanded .tool-header{border-bottom:1px solid var(--border)!important}
-.tool-name{
-  display:inline-flex!important;align-items:center;gap:7px;
-  font-family:var(--mono)!important;font-size:12px!important;
-  color:var(--text-primary)!important;font-weight:400;
-  flex-shrink:0;
-}
-.tool-status-pill{
-  display:inline-flex;align-items:center;
-  background:transparent!important;border:0!important;padding:0!important;
-  flex-shrink:0;
-}
-.tool-status-pill .led{width:6px;height:6px;border-radius:50%;background:currentColor}
-.tool-status-pill.ok{color:#4ade80}
-.tool-status-pill.pending{color:var(--accent)}
-.tool-status-pill.err{color:#f87171}
-.tool-status-pill.pending .led{animation:pulse 1.4s ease-in-out infinite}
-.tool-arg-preview{display:none}
-.tool-dur{
-  font-family:var(--mono);font-size:11px;color:var(--text-muted);
-  font-variant-numeric:tabular-nums;flex-shrink:0;
-}
-.tool-toggle{display:none!important}
-.tool-args{font-size:11px!important;padding:9px 12px!important;line-height:1.55!important;background:var(--bg-root)!important;color:var(--text-secondary)!important;max-height:240px;overflow:auto}
-.tool-result{padding:9px 12px!important;line-height:1.55!important;max-height:520px;overflow:auto;background:var(--bg-primary)!important}
-.tool-result-label{
-  display:flex;justify-content:space-between;align-items:center;
-  margin-bottom:6px;padding-bottom:5px;border-bottom:1px solid var(--border);
-}
-.tool-result-label .lbl{font-size:9px;color:var(--text-tertiary);font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em}
-.tool-result-label .copy-btn{font-size:9px;padding:1px 7px}
-.tool-pending{padding:8px 12px!important;color:var(--accent)!important;font-style:normal!important;font-size:11px!important;background:var(--bg-root)!important;display:flex;align-items:center;gap:7px}
-.tool-pending::before{content:'';width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1.2s ease-in-out infinite}
-
-/* —— Subagent cards: clearer hierarchy —— */
-.subagent-card{padding:10px 12px!important;border-radius:var(--radius)!important;margin-bottom:6px!important;background:var(--bg-secondary)!important;transition:border-color .12s,background .12s}
-.subagent-card:hover{border-color:var(--border-bright)!important;background:var(--bg-tertiary)!important}
-.subagent-card-header{margin-bottom:6px!important;gap:8px;align-items:flex-start!important}
-.subagent-card-name{font-size:12px!important;font-weight:500!important;color:var(--text-primary)!important;line-height:1.35;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--display);letter-spacing:-.005em}
-.subagent-card-status{
-  font-size:9px!important;padding:2px 7px!important;border-radius:8px!important;
-  font-family:var(--mono);text-transform:uppercase;letter-spacing:.06em;
-  display:inline-flex;align-items:center;gap:4px;flex-shrink:0;
-}
-.subagent-card-status.running{background:rgba(74,222,128,.08)!important;color:rgba(74,222,128,.85)!important;border:1px solid rgba(74,222,128,.18)}
-.subagent-card-status.completed{background:rgba(96,165,250,.06)!important;color:rgba(96,165,250,.7)!important;border:1px solid rgba(96,165,250,.15)}
-.subagent-card-status.error{background:rgba(248,113,113,.08)!important;color:#f87171!important;border:1px solid rgba(248,113,113,.2)}
-.subagent-card-status.running .led{width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse 1.4s ease-in-out infinite}
-.subagent-card-meta{font-size:10.5px!important;color:var(--text-tertiary)!important;display:flex!important;flex-wrap:wrap;gap:6px!important;font-family:var(--mono);align-items:center}
-.subagent-card-meta .sep{color:var(--text-muted);opacity:.6}
-.subagent-card-meta .model{color:var(--text-secondary)}
-.subagent-card-meta .tokens{color:var(--text-tertiary)}
-.subagent-card-meta .age{color:var(--text-muted)}
-.subagent-card-preview{
-  font-size:11px;color:var(--text-tertiary);
-  margin-top:5px;padding-top:6px;
-  border-top:1px solid var(--border);
-  overflow:hidden;text-overflow:ellipsis;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
-  line-height:1.45;font-family:var(--sans);
-}
-.subagents-container{padding:12px 16px!important}
-.subagents-header{
-  font-size:10px;color:var(--text-tertiary);
-  margin-bottom:10px;padding-bottom:8px;
-  border-bottom:1px solid var(--border);
-  display:flex;justify-content:space-between;align-items:center;
-  font-family:var(--mono);text-transform:uppercase;letter-spacing:.08em;
-}
-.subagents-header .count{color:var(--text-secondary);font-weight:500}
-.subagents-header .running-count{color:rgba(74,222,128,.85);font-weight:500}
-
-/* ============================================================================
-   SESSION VIEWER v3 — built ground-up with Tailwind utilities (cozy-tailwind.js).
-   This block holds ONLY what Tailwind can't express cleanly: keyframes,
-   markdown-body typography inside .log-md, and a couple of pseudo-elements.
-   All layout/color/spacing lives in utility classes on the rendered nodes.
-   ============================================================================ */
-@keyframes lt-ping{0%{transform:scale(1);opacity:.5}70%{transform:scale(2.4);opacity:0}100%{opacity:0}}
-@keyframes msg-live{0%{background:rgba(229,149,74,.10)}100%{background:transparent}}
-
-/* Markdown rendered inside assistant text — scoped, restrained */
-.log-md{font-size:13.5px;line-height:1.62;color:var(--text-primary)}
-.log-md p{margin:.4em 0}
-.log-md h1,.log-md h2,.log-md h3{font-family:var(--display);font-weight:600;margin:.7em 0 .35em;line-height:1.25}
-.log-md h1{font-size:1.25em}.log-md h2{font-size:1.15em}.log-md h3{font-size:1.05em}
-.log-md ul,.log-md ol{margin:.4em 0;padding-left:1.3em}
-.log-md li{margin:.18em 0}
-.log-md a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(229,149,74,.3)}
-.log-md a:hover{border-bottom-color:var(--accent)}
-.log-md code{font-family:var(--mono);font-size:.86em;background:var(--bg-secondary);padding:1px 5px;border-radius:3px}
-.log-md pre{background:var(--bg-root);border:1px solid var(--border);padding:10px 12px;border-radius:var(--radius);overflow-x:auto;margin:.6em 0}
-.log-md pre code{background:transparent;padding:0;font-size:12px;line-height:1.55}
-.log-md blockquote{border-left:2px solid var(--border-bright);padding-left:12px;color:var(--text-secondary);margin:.5em 0}
-.log-md table{border-collapse:collapse;margin:.5em 0;font-size:12px}
-.log-md th,.log-md td{border:1px solid var(--border);padding:4px 8px;text-align:left}
-
-/* Pre-formatted tool payloads (args + results) keep mono wrapping */
-.payload-pre{font-family:var(--mono);font-size:11.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;color:var(--text-secondary)}
-
-/* Fade mask over a truncated result — gradient can't be a utility token here */
-.tr-fade{background:linear-gradient(to bottom,transparent,var(--bg-secondary))}
-
-/* Live-append highlight on the newest entry */
-.live-new{animation:msg-live 1.6s ease-out}
-
-/* Expand/collapse toggles — reliable across the Tailwind Play CDN (arbitrary
-   group/ancestor variants with escaped dots don't always compile at runtime) */
-.tool-call > .tc-body{display:none}
-.tool-call.expanded > .tc-body{display:block}
-.tool-call.expanded{background:var(--bg-secondary)}
-.thinking-block > .tk-body{display:none}
-.thinking-block.open > .tk-body{display:block}
-.thinking-block.open > .tk-head .tk-preview{display:none}
-.thinking-block .tk-caret,.tool-group .tg-caret-ic{transition:transform .12s}
-.thinking-block.open .tk-caret,.tool-group.open .tg-caret-ic{transform:rotate(90deg)}
-.tool-group > .tg-body{display:none}
-.tool-group.open > .tg-body{display:block}
-
-/* Animated 'ping' ring behind the live dot (uses ::after so it follows the dot) */
-.lt-dot-ping::after{content:'';position:absolute;inset:0;border-radius:9999px;background:inherit;animation:lt-ping 1.8s cubic-bezier(0,0,.2,1) infinite}
-
 /* ── API Keys Modal ── */
 .modal-overlay{
   position:fixed;inset:0;background:rgba(0,0,0,.7);
@@ -1250,25 +1115,6 @@ function liveEventMatchesSelected(data) {
 }
 
 function handleLiveSessionMessage(data) {
-  // Always flash the session row in the sidebar when its messages arrive live.
-  const targetKey = (data.payload && data.payload.sessionKey) || data.sessionKey;
-  const targetSid = (data.payload && data.payload.sessionId) || data.sessionId
-    || (data.payload && data.payload.session && data.payload.session.sessionId);
-  if (targetKey || targetSid) {
-    document.querySelectorAll('.session-card').forEach(card => {
-      const idx = parseInt(card.dataset.index);
-      const s = filteredSessions[idx];
-      if (!s) return;
-      if ((targetKey && s.key === targetKey) || (targetSid && s.sessionId === targetSid)) {
-        card.classList.remove('live-flash');
-        // Force reflow so the animation can replay
-        // eslint-disable-next-line no-unused-expressions
-        card.offsetHeight;
-        card.classList.add('live-flash');
-        setTimeout(() => card.classList.remove('live-flash'), 1500);
-      }
-    });
-  }
   if (!liveEventMatchesSelected(data)) return;
   if (!data.entry) {
     refreshTranscript(selectedSession.sessionId);
@@ -1282,13 +1128,6 @@ function handleLiveSessionMessage(data) {
   transcriptEntries = [...transcriptEntries, data.entry];
   transcriptTotal += 1;
   renderTranscript(transcriptEntries);
-  // Pulse the newly appended log entry.
-  const entries = container.querySelectorAll('.log-entry');
-  const last = entries[entries.length - 1];
-  if (last) {
-    last.classList.add('live-new');
-    setTimeout(() => last.classList.remove('live-new'), 1700);
-  }
   if (wasAtBottom) container.scrollTop = container.scrollHeight;
 }
 
@@ -1795,74 +1634,27 @@ function renderSubagentsPanel(session) {
 }
 
 function renderSubagentCards(container, agents) {
-  const runningN = agents.filter(s => s.status === 'running').length;
-  const header = `<div class="subagents-header">
-    <span><span class="count">${agents.length}</span> sub-agent${agents.length !== 1 ? 's' : ''}</span>
-    ${runningN ? `<span class="running-count">● ${runningN} running</span>` : ''}
-  </div>`;
-  container.innerHTML = header + agents.map(s => {
-    const status = s.status === 'running' ? 'running' : (s.abortedLastRun ? 'error' : 'completed');
-    const statusLabel = status === 'running'
-      ? '<span class="led"></span>running'
-      : (status === 'error' ? '✗ error' : '✓ done');
-    const name = s.label || s.displayName || s.key.split(':').pop().slice(0, 8);
-    const tokens = s.totalTokens ? `${(s.totalTokens/1000).toFixed(1)}k tok` : '';
-    const model = s.model ? s.model.split('/').pop() : '';
-    const ago = s.updatedAt ? formatTime(s.updatedAt) + ' ago' : '';
-    const channel = s.channel || '';
-    const metaParts = [];
-    if (model) metaParts.push(`<span class="model">${escapeHtml(model)}</span>`);
-    if (tokens) metaParts.push(`<span class="tokens">${tokens}</span>`);
-    if (ago) metaParts.push(`<span class="age">${ago}</span>`);
-    if (channel) metaParts.push(`<span>${escapeHtml(channel)}</span>`);
-    const meta = metaParts.join('<span class="sep">·</span>');
-    let preview = s.lastMessage || '';
-    if (!preview && s.activity && s.activity.length) {
-      const last = s.activity[s.activity.length - 1];
-      preview = last.detail || last.action || '';
-    }
-    if (preview.length > 160) preview = preview.slice(0, 160) + '…';
-    const previewHtml = preview ? `<div class="subagent-card-preview">${escapeHtml(preview)}</div>` : '';
-    return `<div class="subagent-card" onclick="openSession('${escapeHtml(s.key)}')">
-      <div class="subagent-card-header">
-        <div class="subagent-card-name">${escapeHtml(name)}</div>
-        <span class="subagent-card-status ${status}">${statusLabel}</span>
-      </div>
-      <div class="subagent-card-meta">${meta}</div>
-      ${previewHtml}
-    </div>`;
-  }).join('');
-}
-
-// —— Helpers for tool-call header preview + duration ——
-function formatDuration(ms) {
-  if (ms < 1000) return ms + 'ms';
-  if (ms < 60000) return (ms / 1000).toFixed(ms < 10000 ? 1 : 0) + 's';
-  const m = Math.floor(ms / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${m}m${s}s`;
-}
-
-function formatToolArgPreview(name, args) {
-  if (!args || typeof args !== 'object') return '';
-  // Heuristic: prefer human-readable hint fields
-  const hintKeys = ['command', 'path', 'url', 'query', 'message', 'text', 'prompt', 'file', 'pattern', 'cmd', 'cwd', 'name'];
-  for (const k of hintKeys) {
-    if (args[k] && typeof args[k] === 'string') {
-      const v = args[k].replace(/\s+/g, ' ').trim();
-      return v.length > 110 ? v.slice(0, 110) + '…' : v;
-    }
-  }
-  // Fall back to first scalar value
-  for (const [k, v] of Object.entries(args)) {
-    if (v == null) continue;
-    if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') {
-      const s = `${k}=${v}`.replace(/\s+/g, ' ').trim();
-      return s.length > 110 ? s.slice(0, 110) + '…' : s;
-    }
-  }
-  const j = JSON.stringify(args).replace(/["{}]/g, '');
-  return j.length > 110 ? j.slice(0, 110) + '…' : j;
+  container.innerHTML = `<div style="font-size:9px;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">${agents.length} sub-agent${agents.length !== 1 ? 's' : ''}</div>` +
+    agents.map(s => {
+      const status = s.status === 'running' ? 'running' : (s.abortedLastRun ? 'error' : 'completed');
+      const statusLabel = status === 'running' ? '● running' : (status === 'error' ? '✗ error' : '✓ done');
+      const name = s.label || s.displayName || s.key.split(':').pop().slice(0, 8);
+      const tokens = s.totalTokens ? `${(s.totalTokens/1000).toFixed(1)}k tok` : '';
+      const model = s.model ? s.model.split('/').pop() : '';
+      const ago = s.updatedAt ? formatTime(s.updatedAt) + ' ago' : '';
+      return `<div class="subagent-card" onclick="openSession('${escapeHtml(s.key)}')">
+        <div class="subagent-card-header">
+          <div class="subagent-card-name">${escapeHtml(name)}</div>
+          <span class="subagent-card-status ${status}">${statusLabel}</span>
+        </div>
+        <div class="subagent-card-meta">
+          ${model ? `<span>${escapeHtml(model)}</span>` : ''}
+          ${tokens ? `<span>${tokens}</span>` : ''}
+          ${ago ? `<span>${ago}</span>` : ''}
+          ${s.channel ? `<span>${escapeHtml(s.channel)}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
 }
 
 function closePanel() {
@@ -1956,171 +1748,6 @@ function setupTranscriptInfiniteScroll(sessionId, container) {
   container.addEventListener('scroll', container._loadMoreHandler, { passive: true });
 }
 
-// —— Headline extraction: which tool arg should be the visible headline? ——
-function toolHeadline(name, args) {
-  if (!args || typeof args !== 'object') return name;
-  const n = (name || '').toLowerCase();
-  const pick = (...keys) => { for (const k of keys) { if (typeof args[k] === 'string' && args[k].trim()) return args[k].trim(); } return null; };
-  let v = null;
-  if (/bash|exec|shell|command|run/.test(n)) v = pick('command','cmd','script');
-  else if (/read|cat|view/.test(n)) v = pick('path','file','filename','file_path');
-  else if (/write|edit|create|update|patch/.test(n)) v = pick('path','file','filename','file_path','target');
-  else if (/browser|navigate|fetch|web/.test(n)) v = pick('url','href','target','action');
-  else if (/grep|search|find/.test(n)) v = pick('pattern','query','q','glob','path');
-  else if (/message|send|telegram|signal/.test(n)) v = pick('message','text','SendMessage','body');
-  else if (/task|spawn|create_task/.test(n)) v = pick('taskName','label','task','agentId');
-  else if (/scheduler|cron/.test(n)) v = pick('name','id','jobId','action');
-  if (!v) v = pick('command','path','url','query','message','text','file','pattern','cmd','cwd','name','action');
-  if (!v) return name;
-  v = v.replace(/\s+/g,' ').trim();
-  return v.length > 140 ? v.slice(0,140) + '…' : v;
-}
-
-function summarizeToolResult(name, text, isErr) {
-  if (text == null) return null;
-  const s = String(text);
-  const n = (name || '').toLowerCase();
-  const bytes = s.length;
-  const lines = bytes ? s.split('\n').length : 0;
-  // exec/bash: look for "exit" hints
-  if (/bash|exec|shell|run/.test(n)) {
-    const m = s.match(/exit(?:\s*code)?\s*[:=]?\s*(\d+)/i);
-    if (m) {
-      const code = m[1];
-      return { text: `exit ${code} · ${lines}L`, klass: code !== '0' ? 'exit-nonzero' : '' };
-    }
-  }
-  if (/read|cat|view/.test(n)) return { text: `${lines}L · ${humanBytes(bytes)}`, klass: '' };
-  if (isErr) return { text: humanBytes(bytes), klass: 'exit-nonzero' };
-  if (bytes > 800) return { text: `${humanBytes(bytes)}${lines>1?' · '+lines+'L':''}`, klass: '' };
-  return null;
-}
-
-function humanBytes(n) {
-  if (n < 1024) return n + 'B';
-  if (n < 1024*1024) return (n/1024).toFixed(n<10240 ? 1 : 0) + 'K';
-  return (n/1024/1024).toFixed(1) + 'M';
-}
-
-function renderToolResultBody(name, text, isErr) {
-  if (text == null || text === '') return '<span class="text-ink-4 italic">(empty)</span>';
-  const PREVIEW_LINES = 30;
-  const lines = text.split('\n');
-  if (lines.length <= PREVIEW_LINES && text.length < 4000) {
-    return `<div class="payload-pre">${escapeHtml(text)}</div>`;
-  }
-  const preview = lines.slice(0, PREVIEW_LINES).join('\n');
-  const moreLines = lines.length - PREVIEW_LINES;
-  const rest = lines.slice(PREVIEW_LINES).join('\n');
-  return `<div class="relative">
-    <div class="tr-preview payload-pre">${escapeHtml(preview)}</div>
-    <div class="tr-fade pointer-events-none absolute inset-x-0 bottom-0 h-10"></div>
-    <button class="tr-more mt-2 inline-flex items-center gap-1.5 rounded-full border border-amber/25 bg-amber/[.06] px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-amber hover:bg-amber/[.12]" onclick="event.stopPropagation();expandToolResult(this, ${JSON.stringify(rest).replace(/</g,'\\u003c')})">+ ${moreLines} more lines · ${humanBytes(text.length - preview.length)}</button>
-  </div>`;
-}
-
-function expandToolResult(btn, rest) {
-  const wrap = btn.closest('.relative');
-  const preview = wrap.querySelector('.tr-preview');
-  preview.textContent = preview.textContent + '\n' + rest;
-  const fade = wrap.querySelector('.tr-fade'); if (fade) fade.remove();
-  btn.remove();
-}
-
-// Live ticker: what is this session DOING right now?
-function buildLiveTicker(entries) {
-  if (!entries.length) return '';
-  // Walk backwards to find the most recent meaningful state.
-  let pendingTool = null, lastTool = null, lastThinking = null, lastText = null;
-  const resultIds = new Set();
-  for (const e of entries) for (const c of (e.content || [])) if (c.type === 'result' && c.id) resultIds.add(c.id);
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const e = entries[i];
-    for (let k = (e.content||[]).length - 1; k >= 0; k--) {
-      const c = e.content[k];
-      if (c.type === 'tool' && !lastTool) {
-        lastTool = { c, ts: c.ts || e.ts };
-        if (!resultIds.has(c.id)) pendingTool = lastTool;
-      }
-      if (c.type === 'thinking' && (c.text||'').trim() && !lastThinking) lastThinking = { c, ts: e.ts };
-      if (c.type === 'text' && (c.text||'').trim() && !lastText) lastText = { c, ts: e.ts };
-    }
-    if (pendingTool && lastText) break;
-  }
-
-  const sessionStatus = (selectedSession && selectedSession.status) || 'idle';
-  let stateClass = 'idle', stateLabel = 'Idle', detail = '', tsRef = null;
-
-  if (pendingTool) {
-    stateClass = 'running';
-    stateLabel = 'Running';
-    detail = toolHeadline(pendingTool.c.name, pendingTool.c.args);
-    tsRef = pendingTool.ts;
-  } else if (sessionStatus === 'running' && lastThinking) {
-    stateClass = 'thinking';
-    stateLabel = 'Thinking';
-    detail = (lastThinking.c.text || '').replace(/\s+/g, ' ').slice(0, 140);
-    tsRef = lastThinking.ts;
-  } else if (sessionStatus === 'running' && lastTool) {
-    stateClass = 'running';
-    stateLabel = 'Running';
-    detail = toolHeadline(lastTool.c.name, lastTool.c.args);
-    tsRef = lastTool.ts;
-  } else if (lastTool) {
-    stateClass = 'idle';
-    stateLabel = 'Idle — last';
-    detail = toolHeadline(lastTool.c.name, lastTool.c.args);
-    tsRef = lastTool.ts;
-  } else if (lastText) {
-    stateClass = 'idle';
-    stateLabel = 'Idle';
-    detail = (lastText.c.text || '').replace(/\s+/g, ' ').slice(0, 140);
-    tsRef = lastText.ts;
-  }
-
-  let timeStr = '';
-  if (tsRef) {
-    const ago = Date.now() - tsRef;
-    timeStr = formatDuration(ago) + ' ago';
-  }
-  // step count = total tool calls in the session
-  let stepCount = 0;
-  for (const e of entries) for (const c of (e.content||[])) if (c.type === 'tool') stepCount++;
-
-  const tone = {
-    running: { dot:'bg-led-green', text:'text-led-green', ring:'ring-led-green/15', live:true, verb:'Running' },
-    thinking:{ dot:'bg-led-violet', text:'text-led-violet', ring:'ring-led-violet/15', live:true, verb:'Thinking' },
-    error:   { dot:'bg-led-red', text:'text-led-red', ring:'ring-led-red/15', live:false, verb:'Error' },
-    idle:    { dot:'bg-ink-4', text:'text-ink-3', ring:'ring-white/5', live:false, verb:'Idle' },
-  }[stateClass] || { dot:'bg-ink-4', text:'text-ink-3', ring:'ring-white/5', live:false, verb:'Idle' };
-  const dotCls = `relative inline-block h-2.5 w-2.5 shrink-0 rounded-full ${tone.dot}${tone.live ? ' lt-dot-ping' : ''}`;
-  return `<div class="hero-now sticky top-0 z-10 flex items-center gap-3.5 border-b border-hair-mid bg-graphite px-5 py-3 shadow-panel" data-ts="${tsRef||0}" data-state="${stateClass}">
-    <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-4 ${tone.ring} bg-panel"><span class="${dotCls}"></span></span>
-    <div class="min-w-0 flex-1">
-      <div class="flex items-baseline gap-2">
-        <span class="lt-state text-[13px] font-semibold ${tone.text}">${stateLabel}</span>
-        <span class="font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">now</span>
-      </div>
-      <div class="lt-detail truncate font-mono text-[12px] text-ink-2">${escapeHtml(detail) || '—'}</div>
-    </div>
-    <div class="shrink-0 text-right">
-      <div class="lt-time font-mono text-[12px] tabular-nums ${tone.text}">${timeStr || '—'}</div>
-      <div class="font-mono text-[10px] text-ink-4">${stepCount} step${stepCount===1?'':'s'}</div>
-    </div>
-  </div>`;
-}
-
-// Refresh just the time-ago on the ticker each second without re-rendering anything else.
-setInterval(() => {
-  const tk = document.querySelector('.hero-now');
-  if (!tk) return;
-  const ts = parseInt(tk.dataset.ts || '0', 10);
-  if (!ts) return;
-  const ago = Date.now() - ts;
-  const el = tk.querySelector('.lt-time');
-  if (el) el.textContent = formatDuration(ago) + ' ago';
-}, 1000);
-
 function renderTranscript(entries) {
   const container = document.getElementById('logContainer');
   if (!entries.length) { container.innerHTML = '<div class="empty-state"><p>no entries</p></div>'; return; }
@@ -2131,252 +1758,45 @@ function renderTranscript(entries) {
   });
   const renderedResults = new Set();
 
-  const orient = buildLiveTicker(entries);
-
-  // Build a flat HTML pass; user messages become banners, consecutive same-tool runs group.
-  const blocks = [];
-  let toolBuf = []; // {name, html, headlineShort}
-  let toolBufName = null;
-  const flushToolBuf = () => {
-    if (!toolBuf.length) return;
-    if (toolBuf.length >= 3) {
-      const items = toolBuf.map(t => t.html).join('');
-      const headlines = toolBuf.map(t => t.headlineShort).filter(Boolean).slice(0,3).join('  ·  ');
-      const totalMs = toolBuf.reduce((a,t)=>a+(t.ms||0),0);
-      const anyErr = toolBuf.some(t => t.err);
-      blocks.push({kind: anyErr?'err':'tools', html:`<div class="tool-group overflow-hidden rounded border border-hair" onclick="if(event.target.closest('.tg-head'))this.classList.toggle('open')">
-        <div class="tg-head flex cursor-pointer items-center gap-2.5 px-3 py-2 font-mono text-[11px] text-ink-2 hover:bg-panel">
-          <svg class="tg-caret-ic h-3 w-3 shrink-0 text-ink-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
-          <span class="shrink-0 font-medium text-ink">${escapeHtml(toolBufName)}</span>
-          <span class="shrink-0 tabular-nums ${anyErr?'text-led-red':'text-amber'}">×${toolBuf.length}</span>
-          <span class="min-w-0 flex-1 truncate text-ink-3">${escapeHtml(headlines)}</span>
-          ${totalMs ? `<span class="shrink-0 tabular-nums text-ink-4">${formatDuration(totalMs)}</span>` : ''}
-        </div>
-        <div class="tg-body px-2.5 pb-2">${items}</div>
-      </div>`});
-    } else {
-      toolBuf.forEach(t => blocks.push({kind: t.err?'err':'tool', html: t.html}));
-    }
-    toolBuf = []; toolBufName = null;
-  };
-
-  for (const entry of entries) {
-    const role = entry.role || 'system';
-    const entryContent = entry.content || [];
-
-    // User: banner, breaks any tool group
-    if (role === 'user' && entryContent.some(c => c.type === 'text')) {
-      flushToolBuf();
-      const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n');
-      blocks.push({kind:'user', html:`<div class="rounded-lg border border-amber/25 bg-amber/[.05] px-4 py-3">
-        <div class="mb-1.5 flex items-baseline justify-between font-mono text-[10px] uppercase tracking-[.1em]">
-          <span class="font-semibold text-amber">You</span><span class="text-ink-4">${formatTimestamp(entry.ts)}</span>
-        </div>
-        <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
-      </div>`});
-      continue;
-    }
-
-    // Walk content. Each tool call gets buffered (for grouping) unless separator hits.
-    let entryBlocks = [];
-    let entryThinking = [];
-    let entryText = [];
-    let entryToolCalls = [];
-
-    for (const c of entryContent) {
-      if (c.type === 'thinking') {
-        const txt = (c.text || '').trim();
-        if (!txt) continue; // drop empty thinking
-        entryThinking.push(txt);
-      } else if (c.type === 'text') {
-        if ((c.text || '').trim()) entryText.push(c.text);
-      } else if (c.type === 'tool') {
-        entryToolCalls.push(c);
-      } else if (c.type === 'result' && !renderedResults.has(c.id)) {
-        // Orphan result, render inline
-        const isErr = c.isError || /^error[:\s]/i.test((c.text||'').slice(0,80));
-        flushToolBuf();
-        blocks.push({kind: isErr?'err':'tool', html:`<div class="overflow-hidden rounded border border-hair bg-panel">
-          <div class="flex items-center gap-2.5 px-2.5 py-1.5">
-            <span class="h-[6px] w-[6px] shrink-0 rounded-full ${isErr?'bg-led-red':'bg-led-green'}"></span>
-            <span class="shrink-0 font-mono text-[11px] text-ink-4">${escapeHtml(c.name || 'result')}</span>
-          </div>
-          <div class="border-t border-hair px-3 py-2">${renderToolResultBody(c.name, c.text||'', isErr)}</div>
-        </div>`});
-      } else if (c.type === 'image') {
-        flushToolBuf();
-        blocks.push({kind:'tool', html:`<img class="max-h-80 cursor-pointer rounded border border-hair" src="${escapeHtml(c.url)}" onclick="window.open('${escapeHtml(c.url)}','_blank')" onerror="this.outerHTML='<span class=text-ink-4>Image: '+this.src+'</span>'" />`});
-      }
-    }
-
-    // Render assistant text first (breaks tool group)
-    if (entryText.length || entryThinking.length) {
-      flushToolBuf();
-      let inner = '';
-      for (const t of entryThinking) {
-        const preview = t.replace(/\s+/g,' ').slice(0, 120);
-        inner += `<div class="thinking-block my-1.5" onclick="this.classList.toggle('open')">
-          <div class="tk-head flex cursor-pointer items-center gap-2 py-0.5 text-ink-4 hover:text-ink-2">
-            <span class="shrink-0 font-mono text-[10px] uppercase tracking-[.08em] text-led-violet/70">Think</span>
-            <span class="tk-preview min-w-0 flex-1 truncate text-[11.5px] italic">${escapeHtml(preview)}${t.length>120?'…':''}</span>
-            <svg class="tk-caret h-2.5 w-2.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
-          </div>
-          <div class="tk-body ml-[5px] whitespace-pre-wrap border-l border-hair py-1.5 pl-4 text-[12.5px] leading-relaxed text-ink-3">${escapeHtml(t)}</div>
-        </div>`;
-      }
-      for (const tx of entryText) {
-        inner += `<div class="log-md">${marked.parse(tx || '')}</div>`;
-      }
-      const metaHtml = [];
-      if (entry.model) metaHtml.push(escapeHtml(entry.model));
-      if (entry.cost > 0) metaHtml.push(`$${entry.cost.toFixed(4)}`);
-      if (entry.tokens && (entry.tokens.in || entry.tokens.out)) {
-        metaHtml.push(`${entry.tokens.in}→${entry.tokens.out}`);
-        if (entry.tokens.cache) metaHtml.push(`${entry.tokens.cache} cached`);
-      }
-      const label = role === 'assistant' ? 'Cozy' : role.charAt(0).toUpperCase()+role.slice(1);
-      const hasText = entryText.length > 0;
-      blocks.push({kind:'say', html:`<div class="log-entry rounded-lg border border-hair bg-panel/40 px-4 py-3">
-        <div class="mb-2 flex items-baseline gap-2.5">
-          <span class="font-mono text-[10px] font-semibold uppercase tracking-[.1em] text-led-violet/80">${label}</span>
-          <span class="font-mono text-[10px] text-ink-4">${formatTimestamp(entry.ts)}</span>
-          ${metaHtml.length ? `<span class="ml-auto cursor-default font-mono text-[10px] text-ink-4/50 hover:text-ink-3" title="${metaHtml.join('  ·  ')}">${escapeHtml(entry.model||'')}</span>` : ''}
-        </div>
-        ${inner}
-      </div>`});
-    }
-
-    // Tool calls: build the per-tool HTML, buffer for grouping
-    for (const c of entryToolCalls) {
-      const result = resultMap[c.id];
-      const argsPretty = JSON.stringify(c.args || {}, null, 2);
-      const headline = toolHeadline(c.name, c.args);
-      const headlineShort = headline === c.name ? '' : (headline.length > 60 ? headline.slice(0,60)+'…' : headline);
-      let dotCls, durHtml = '', summaryHtml = '', resultHtml, ms = 0, isErr = false;
-      if (result) {
-        renderedResults.add(c.id);
-        if (c.ts && result.ts) { ms = Math.max(0, result.ts - c.ts); durHtml = `<span class="shrink-0 tabular-nums font-mono text-[11px] text-ink-4">${formatDuration(ms)}</span>`; }
-        isErr = result.isError || /^error[:\s]/i.test((result.text||'').slice(0,80));
-        dotCls = isErr ? 'bg-led-red' : 'bg-led-green';
-        const sum = summarizeToolResult(c.name, result.text || '', isErr);
-        if (sum) summaryHtml = `<span class="shrink-0 font-mono text-[11px] tabular-nums ${sum.klass==='exit-nonzero'?'text-led-red':'text-ink-4'}">${escapeHtml(sum.text)}</span>`;
-        resultHtml = `<div class="tc-body border-t border-hair">
-          <div class="border-b border-hair px-3 py-2"><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
-          <div class="px-3 py-2">
-            <div class="mb-1.5 flex items-center justify-between">
-              <span class="font-mono text-[9px] uppercase tracking-[.08em] text-ink-4">${isErr?'error':'result'}</span>
-              <button class="font-mono text-[9px] text-ink-4 hover:text-amber" onclick="event.stopPropagation();copyText(${JSON.stringify(result.text||'').replace(/</g,'\\u003c')})">copy</button>
-            </div>
-            ${renderToolResultBody(c.name, result.text || '', isErr)}
-          </div>
-        </div>`;
-      } else {
-        dotCls = 'bg-amber animate-pulse';
-        resultHtml = `<div class="tc-body border-t border-hair">
-          <div class="px-3 py-2"><div class="payload-pre">${escapeHtml(argsPretty)}</div></div>
-          <div class="px-3 py-2 font-mono text-[11px] text-amber">running…</div>
-        </div>`;
-      }
-      const toolHtml = `<div class="tool-call my-0.5 cursor-pointer overflow-hidden rounded hover:bg-panel" onclick="toggleToolCall(this)">
-        <div class="flex items-center gap-2.5 px-2.5 py-1.5">
-          <span class="h-[6px] w-[6px] shrink-0 rounded-full ${dotCls}"></span>
-          <span class="shrink-0 font-mono text-[11px] text-ink-4">${escapeHtml(c.name)}</span>
-          <span class="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">${escapeHtml(headline)}</span>
-          ${summaryHtml}
-          ${durHtml}
-        </div>
-        ${resultHtml}
-      </div>`;
-
-      if (toolBufName && toolBufName !== c.name) flushToolBuf();
-      toolBufName = c.name;
-      toolBuf.push({ name: c.name, html: toolHtml, headlineShort, ms, err: isErr });
-    }
-  }
-  flushToolBuf();
-
-  // Wrap each block as a timeline row: a spine node + the content card.
-  const nodeTone = {
-    user:  'bg-amber ring-amber/20',
-    say:   'bg-led-violet/80 ring-led-violet/20',
-    tool:  'bg-led-green ring-led-green/20',
-    tools: 'bg-led-green ring-led-green/20',
-    err:   'bg-led-red ring-led-red/20',
-  };
-  const rows = blocks.map(b => {
-    const dot = nodeTone[b.kind] || 'bg-ink-4 ring-white/5';
-    const big = (b.kind === 'user' || b.kind === 'say');
-    const sz = big ? 'h-2.5 w-2.5' : 'h-1.5 w-1.5';
-    return `<div class="tl-row relative pl-9">
-      <span class="absolute left-[11px] top-3.5 ${sz} -translate-x-1/2 rounded-full ring-4 ${dot}"></span>
-      <div class="py-1.5">${b.html}</div>
-    </div>`;
-  }).join('');
-  const timeline = `<div class="tl relative"><span class="absolute left-[11px] top-0 bottom-0 w-px bg-hair"></span>${rows}</div>`;
-
-  container.innerHTML = orient + `<div class="px-5 py-4">${timeline}</div>`;
-  setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
-  return; // skip old code path
-
-  // Legacy path below intentionally left for reference; never reached.
-  /*
   const html = entries.map(entry => {
     const role = entry.role || 'system';
     let contentHtml = '';
     (entry.content || []).forEach(c => {
       if (c.type === 'tool') {
         const result = resultMap[c.id];
-        const argsStr = JSON.stringify(c.args || {});
-        const argsPretty = JSON.stringify(c.args || {}, null, 2);
-        const argsPreview = formatToolArgPreview(c.name, c.args);
-        let statusPill, resultHtml, durHtml = '';
+        let resultHtml;
         if (result) {
           renderedResults.add(c.id);
-          if (c.ts && result.ts) {
-            const ms = Math.max(0, result.ts - c.ts);
-            durHtml = `<span class="tool-dur">${formatDuration(ms)}</span>`;
-          }
-          const isErr = result.isError || /^error[:\s]/i.test((result.text||'').slice(0,80));
-          statusPill = `<span class="tool-status-pill ${isErr?'err':'ok'}"><span class="led"></span>${isErr?'err':'ok'}</span>`;
           resultHtml = `<div class="tool-content">
-            <div class="tool-args">${escapeHtml(argsPretty)}</div>
+            <div class="tool-args">${escapeHtml(JSON.stringify(c.args || {}, null, 2))}</div>
             <div class="tool-result">
-              <div class="tool-result-label">
-                <span class="lbl">${isErr?'error':'result'}</span>
-                <button class="copy-btn" onclick="event.stopPropagation();copyText(${JSON.stringify(result.text||'').replace(/</g,'\\u003c')})">copy</button>
+              <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+                <span style="color:rgba(74,222,128,.7);font-weight:600;font-size:9px;letter-spacing:.5px">RESULT</span>
+                <button class="copy-btn" onclick="copyText('${escapeHtml(result.text || '')}')">copy</button>
               </div>
               ${escapeHtml(result.text || '(empty)')}
             </div>
           </div>`;
         } else {
-          statusPill = `<span class="tool-status-pill pending"><span class="led"></span>pending</span>`;
           resultHtml = `<div class="tool-content">
-            <div class="tool-args">${escapeHtml(argsPretty)}</div>
-            <div class="tool-pending">waiting for result…</div>
+            <div class="tool-args">${escapeHtml(JSON.stringify(c.args || {}, null, 2))}</div>
+            <div class="tool-pending">waiting for result...</div>
           </div>`;
         }
         contentHtml += `<div class="tool-call" onclick="toggleToolCall(this)">
           <div class="tool-header">
-            <span class="tool-name">${escapeHtml(c.name)}</span>
-            ${statusPill}
-            <span class="tool-arg-preview">${escapeHtml(argsPreview)}</span>
-            ${durHtml}
-            <span class="tool-toggle">▾</span>
+            <div class="tool-name">${escapeHtml(c.name)}</div>
+            <div class="tool-toggle">▾</div>
           </div>
           ${resultHtml}
         </div>`;
       } else if (c.type === 'result' && !renderedResults.has(c.id)) {
-        const isErr = c.isError || /^error[:\s]/i.test((c.text||'').slice(0,80));
         contentHtml += `<div class="tool-call expanded">
           <div class="tool-header">
-            <span class="tool-name">${escapeHtml(c.name||'result')}</span>
-            <span class="tool-status-pill ${isErr?'err':'ok'}"><span class="led"></span>${isErr?'err':'ok'}</span>
-            <span class="tool-toggle">▾</span>
+            <div class="tool-name">${escapeHtml(c.name)}</div>
+            <button class="copy-btn" onclick="copyText('${escapeHtml(c.text || '')}')">copy</button>
           </div>
-          <div class="tool-content"><div class="tool-result">
-            <div class="tool-result-label"><span class="lbl">${isErr?'error':'result'}</span><button class="copy-btn" onclick="event.stopPropagation();copyText(${JSON.stringify(c.text||'').replace(/</g,'\\u003c')})">copy</button></div>
-            ${escapeHtml(c.text || '(empty)')}
-          </div></div>
+          <div class="tool-content"><div class="tool-result">${escapeHtml(c.text || '(empty)')}</div></div>
         </div>`;
       } else if (c.type === 'text') {
         contentHtml += `<div class="log-text">${marked.parse(c.text || '')}</div>
@@ -2386,17 +1806,7 @@ function renderTranscript(entries) {
           onclick="window.open('${escapeHtml(c.url)}','_blank')"
           onerror="this.outerHTML='<span style=color:var(--text-muted)>Image: '+this.src+'</span>'" />`;
       } else if (c.type === 'thinking') {
-        const txt = c.text || '';
-        const preview = txt.replace(/\s+/g,' ').trim().slice(0, 120);
-        contentHtml += `<div class="thinking-block" onclick="this.classList.toggle('open')">
-          <div class="thinking-header">
-            <svg class="think-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-4 12.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26A7 7 0 0 0 12 2z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
-            <span>Thinking</span>
-            <span class="thinking-preview">${escapeHtml(preview)}${txt.length>120?'…':''}</span>
-            <span class="think-caret">▸</span>
-          </div>
-          <div class="thinking-body">${escapeHtml(txt)}</div>
-        </div>`;
+        contentHtml += `<div class="thinking-block">${escapeHtml(c.text)}</div>`;
       }
     });
     if (!contentHtml.trim()) return '';
@@ -2419,7 +1829,6 @@ function renderTranscript(entries) {
 
   container.innerHTML = html;
   setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
-  */
 }
 
 function closeDetailPanel() {
