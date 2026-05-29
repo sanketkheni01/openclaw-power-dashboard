@@ -766,6 +766,12 @@ body{
 .thinking-block.open .tk-caret,.tool-group.open .tg-caret-ic{transform:rotate(90deg)}
 .tool-group > .tg-body{display:none}
 .tool-group.open > .tg-body{display:block}
+.user-collapse{cursor:pointer}
+.user-collapse > .uc-body{display:none}
+.user-collapse.open > .uc-body{display:block}
+.user-collapse.open .uc-preview{display:none}
+.user-collapse .uc-caret{transition:transform .12s}
+.user-collapse.open .uc-caret{transform:rotate(90deg)}
 
 /* Animated 'ping' ring behind the live dot (uses ::after so it follows the dot) */
 .lt-dot-ping::after{content:'';position:absolute;inset:0;border-radius:9999px;background:inherit;animation:lt-ping 1.8s cubic-bezier(0,0,.2,1) infinite}
@@ -2169,6 +2175,23 @@ function renderTranscript(entries) {
     if (role === 'user' && entryContent.some(c => c.type === 'text')) {
       flushToolBuf();
       const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n');
+      const isInternal = /<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>|OCPlatform runtime context \(internal\)|\[Internal task completion event\]|\[Inter-session message\]/.test(text);
+      const isLong = text.length > 600 || (text.match(/\n/g)||[]).length > 8;
+      if (isInternal || isLong) {
+        const label = isInternal ? 'System / internal' : 'You';
+        const accent = isInternal ? 'border-ink-4/40 bg-ink-4/[.04]' : 'border-amber bg-amber/[.05]';
+        const labelColor = isInternal ? 'text-ink-4' : 'text-amber';
+        const preview = text.replace(/\s+/g,' ').slice(0, 120);
+        blocks.push({kind:'user', ts: entry.ts, html:`<div class="user-collapse border-l-2 ${accent} py-2 pl-3 pr-2" onclick="this.classList.toggle('open')">
+          <div class="flex cursor-pointer items-center gap-2">
+            <span class="font-mono text-[10px] font-semibold uppercase tracking-[.14em] ${labelColor}">${label}</span>
+            <span class="uc-preview min-w-0 flex-1 truncate font-mono text-[11px] text-ink-3">${escapeHtml(preview)}…</span>
+            <svg class="uc-caret h-2.5 w-2.5 shrink-0 text-ink-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+          <div class="uc-body mt-1.5 whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-ink">${escapeHtml(text)}</div>
+        </div>`});
+        continue;
+      }
       blocks.push({kind:'user', ts: entry.ts, html:`<div class="border-l-2 border-amber bg-amber/[.05] py-2.5 pl-3 pr-2">
         <div class="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-amber">You</div>
         <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
@@ -2678,8 +2701,17 @@ function showKeyboardHelp() {
 
 let topicNamesMap = {};
 
+function isJunkLabel(s) {
+  if (!s) return true;
+  const t = String(s).trim();
+  // reject serialized JSON / session-header blobs leaking into the label
+  if (/^[\[{]/.test(t)) return true;
+  if (/"schema"\s*:|"kind"\s*:|"ids"\s*:/.test(t)) return true;
+  if (/^main?JRV\d/i.test(t)) return true;
+  return false;
+}
 function getSessionName(session) {
-  if (session.label) return session.label;
+  if (session.label && !isJunkLabel(session.label)) return session.label;
   const topicMatch = session.key.match(/topic:(\d+)/);
   const groupMatch = session.key.match(/group:(-?\d+)/);
   if (topicMatch) {
