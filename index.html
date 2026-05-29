@@ -766,6 +766,8 @@ body{
 .thinking-block.open .tk-caret,.tool-group.open .tg-caret-ic{transform:rotate(90deg)}
 .tool-group > .tg-body{display:none}
 .tool-group.open > .tg-body{display:block}
+.say-block{border:1px solid color-mix(in srgb,var(--violet) 28%,transparent);border-left:3px solid var(--violet);background:color-mix(in srgb,var(--violet) 9%,transparent)}
+.umsg-block{border:1px solid color-mix(in srgb,var(--accent) 30%,transparent);border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 9%,transparent)}
 .user-collapse{cursor:pointer}
 .user-collapse > .uc-body{display:none}
 .user-collapse.open > .uc-body{display:block}
@@ -2192,8 +2194,8 @@ function renderTranscript(entries) {
         </div>`});
         continue;
       }
-      blocks.push({kind:'user', ts: entry.ts, html:`<div class="border-l-2 border-amber bg-amber/[.05] py-2.5 pl-3 pr-2">
-        <div class="mb-1 font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-amber">You</div>
+      blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-block rounded-md py-2 pl-3 pr-2.5">
+        <div class="mb-1 flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-amber"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber"></span>You</div>
         <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
       </div>`});
       continue;
@@ -2257,10 +2259,10 @@ function renderTranscript(entries) {
         if (entry.tokens.cache) metaHtml.push(`${entry.tokens.cache} cached`);
       }
       const label = role === 'assistant' ? 'Cozy' : role.charAt(0).toUpperCase()+role.slice(1);
-      blocks.push({kind:'say', ts: entry.ts, html:`<div class="log-entry py-1">
-        <div class="mb-1.5 flex items-baseline gap-2.5">
-          <span class="font-mono text-[10px] font-semibold uppercase tracking-[.14em] text-led-violet/90">${label}</span>
-          ${metaHtml.length ? `<span class="ml-auto cursor-default font-mono text-[9px] text-ink-4/50 hover:text-ink-3" title="${metaHtml.join('  ·  ')}">${escapeHtml(entry.model||'')}</span>` : ''}
+      blocks.push({kind:'say', ts: entry.ts, html:`<div class="say-block rounded-md py-2 pl-3 pr-2.5">
+        <div class="mb-1 flex items-baseline gap-2.5">
+          <span class="flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-led-violet"><span class="inline-block h-1.5 w-1.5 rounded-full bg-led-violet"></span>${label}</span>
+          ${metaHtml.length ? `<span class="ml-auto cursor-default font-mono text-[9px] text-ink-4/40 hover:text-ink-3" title="${metaHtml.join('  ·  ')}">${escapeHtml(entry.model||'')}</span>` : ''}
         </div>
         ${inner}
       </div>`});
@@ -2326,12 +2328,17 @@ function renderTranscript(entries) {
     const showTime = clock && clock !== lastClock;
     if (clock) lastClock = clock;
     const tc = timeColor[b.kind] || 'text-ink-4';
+    const isMsg = b.kind === 'say' || b.kind === 'user';
+    const rowGap = isMsg ? ' mt-3' : '';
+    const contentCell = isMsg
+      ? `<div class="min-w-0 pl-2">${b.html}</div>`
+      : `<div class="min-w-0 border-l border-hair pl-3.5">${b.html}</div>`;
     const timeCell = showTime
       ? `<div class="pt-1.5 pr-3 text-right font-mono text-[10px] tabular-nums ${tc}">${clock}</div>`
       : `<div></div>`;
-    return `<div class="tl-row grid grid-cols-[56px_1fr] items-start">
+    return `<div class="tl-row grid grid-cols-[56px_1fr] items-start${rowGap}">
       ${timeCell}
-      <div class="min-w-0 border-l border-hair pl-3.5">${b.html}</div>
+      ${contentCell}
     </div>`;
   }).join('');
   const timeline = `<div class="tl">${rows}</div>`;
