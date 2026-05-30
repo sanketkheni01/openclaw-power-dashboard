@@ -256,3 +256,18 @@ inflation). Resolved by giving each page a single genuine focal element rather t
 
 Note: live-URL detect mode (Puppeteer) needs `--no-sandbox` as root; static-file analysis
 uses identical rule logic and is authoritative here.
+
+---
+
+## Spacing fix — sessions rail double-gutter (2026-05-30)
+
+Sanket caught a dead empty strip between the session list content and the rail's right
+divider. Cause: an Impeccable "spacing pass" had added a blanket `.sessions-panel{padding:12px}`
+override, but the rail's header and every session card already carry their own 16–20px
+horizontal padding → double gutter + dead right-side strip. Removed the override (`padding:0`).
+
+**Detector tradeoff:** with `padding:0`, `detect` now flags `cramped-padding` on `.sessions-panel`
+("children flush against border"). That is a **misfire for a full-bleed sidebar-list pattern**
+(rows span edge-to-edge with their own internal padding — standard in VSCode/Linear/etc.).
+Re-adding panel padding would literally reintroduce the dead gap Sanket flagged. So this is a
+**deliberate waiver**: visual correctness > linter. index.html otherwise clean.
