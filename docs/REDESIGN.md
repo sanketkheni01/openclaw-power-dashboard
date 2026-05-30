@@ -312,3 +312,25 @@ plus the live detail (command/query/url/response snippet).
 - Only rendered for `status === 'running'` cards; replaces the generic preview line there.
 - Idle/completed cards unchanged (still show last-message preview).
 Verified live: cards show "Thinking" / "Responding" / tool names with live detail text.
+
+---
+
+## Right-aligned user messages + instant live-status (2026-05-30)
+
+**Right-aligned user messages (chat-app style):**
+- `index.html`: user `kind:'user'` blocks now render in a `flex flex-col items-end` row;
+  short messages use an amber-tinted rounded chat bubble (`.umsg-bubble`, inline-styled bg
+  `rgba(229,149,74,.10)` + border — the `bg-amber/[.08]` Tailwind opacity modifier doesn't
+  work with CSS-var colors in the runtime build, so explicit style). Assistant/tool content
+  stays left-aligned. User media also aligns right.
+- `session.html`: `.log-entry.role-user` → `margin-left:auto; max-width:82%`, right border
+  accent, amber bubble on `.log-text`, header reversed.
+
+**Instant live-status via WebSocket:**
+- `updateLiveStatusPill(card, session, entry)` + `deriveLiveStatus(entry)` mirror the backend's
+  activity derivation (🧠/💬/🔧/✅ + detail). Called from `handleLiveSessionMessage` when a live
+  gateway message arrives for a card, so the green pill updates the moment a tool/think/response
+  fires — no longer waiting for the next sessions.json poll. Falls back to poll-rendered pill.
+
+Verified: user bubbles right-aligned in both views (measured leftGap≫rightGap); live pill
+updates on WS events. No detector regressions.

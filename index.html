@@ -1300,6 +1300,7 @@ function handleLiveSessionMessage(data) {
         card.offsetHeight;
         card.classList.add('live-flash');
         setTimeout(() => card.classList.remove('live-flash'), 1500);
+        updateLiveStatusPill(card, s, data.entry);
       }
     });
   }
@@ -1643,6 +1644,51 @@ function teardownVirtualScroll() {
   container.style.position = '';
   container.style.height = '';
   container.style.minHeight = '';
+}
+
+// Derive a {action, detail} live-status from a live transcript entry (mirrors backend get_recent_activity)
+function deriveLiveStatus(entry) {
+  if (!entry) return null;
+  const content = entry.content || [];
+  // Scan newest-first for the most telling signal
+  for (let i = content.length - 1; i >= 0; i--) {
+    const c = content[i];
+    if (c.type === 'result') return { action: `✅ ${c.name || 'tool'} done`, detail: (c.text || '').slice(0, 70) };
+    if (c.type === 'tool') {
+      const a = c.args || {};
+      const detail = a.command || a.query || a.url || a.action || '';
+      return { action: `🔧 ${c.name || 'tool'}`, detail: String(detail).slice(0, 70) };
+    }
+    if (c.type === 'text' && (c.text || '').trim() && c.text.trim() !== 'NO_REPLY')
+      return { action: '💬 Responding', detail: c.text.trim().slice(0, 80) };
+    if (c.type === 'thinking') return { action: '🧠 Thinking', detail: '' };
+  }
+  return null;
+}
+
+// Instantly update (or inject) the live-status pill on a card from a live WS entry
+function updateLiveStatusPill(card, session, entry) {
+  const ls = deriveLiveStatus(entry);
+  if (!ls) return;
+  // keep the session model's activity in sync so re-renders persist it
+  session.status = 'running';
+  session.activity = [...(session.activity || []), ls].slice(-3);
+  let pill = card.querySelector('.live-status');
+  const detailHtml = ls.detail ? `<span class="ls-detail">${escapeHtml(ls.detail)}</span>` : '';
+  const inner = `<span class="ls-pulse"></span><span class="ls-action">${escapeHtml(ls.action)}</span>${detailHtml}`;
+  if (pill) { pill.innerHTML = inner; }
+  else {
+    pill = document.createElement('div');
+    pill.className = 'live-status';
+    pill.innerHTML = inner;
+    const cp = card.querySelector('.card-preview');
+    if (cp) cp.replaceWith(pill);
+    else {
+      const meta = card.querySelector('.card-meta');
+      if (meta) meta.insertAdjacentElement('afterend', pill);
+      else card.appendChild(pill);
+    }
+  }
 }
 
 function createSessionCard(session, index) {
@@ -2249,9 +2295,8 @@ function renderTranscript(entries) {
         pushUserMedia();
         continue;
       }
-      blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-block rounded-md py-2 pl-3 pr-2.5">
-        <div class="mb-1 flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-amber"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber"></span>You</div>
-        <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
+      blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-bubble inline-block rounded-2xl rounded-tr-sm py-2 px-3 text-left" style="background:rgba(229,149,74,.10);border:1px solid rgba(229,149,74,.30)">
+        <div class="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed" style="color:var(--ink)">${escapeHtml(text)}</div>
       </div>`});
       pushUserMedia();
       continue;
@@ -2387,7 +2432,15 @@ function renderTranscript(entries) {
     const showTime = clock && clock !== lastClock;
     if (clock) lastClock = clock;
     const tc = timeColor[b.kind] || 'text-ink-4';
-    const isMsg = b.kind === 'say' || b.kind === 'user';
+    // User messages render right-aligned (chat-app style)
+    if (b.kind === 'user') {
+      const timeBadge = showTime ? `<span class="font-mono text-[10px] tabular-nums ${tc}">${clock}</span>` : '';
+      return `<div class="tl-row flex flex-col items-end mt-3">
+        ${timeBadge ? `<div class="mb-0.5 pr-1">${timeBadge}</div>` : ''}
+        <div class="min-w-0 max-w-[82%]">${b.html}</div>
+      </div>`;
+    }
+    const isMsg = b.kind === 'say';
     const rowGap = isMsg ? ' mt-3' : '';
     const contentCell = isMsg
       ? `<div class="min-w-0 pl-2">${b.html}</div>`

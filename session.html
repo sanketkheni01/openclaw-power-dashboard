@@ -44,6 +44,11 @@ body{display:flex;flex-direction:column;overflow:hidden;font-size:13px;line-heig
 
 .log-entry{margin:14px 0;padding-left:12px;border-left:2px solid var(--border-mid)}
 .log-entry.role-user{border-color:rgba(96,165,250,.4)}
+/* User messages: right-aligned chat-bubble style */
+.log-entry.role-user{margin-left:auto;max-width:82%;border-left:none;border-right:2px solid rgba(229,149,74,.4);padding-left:0;padding-right:12px;text-align:right}
+.log-entry.role-user .log-header{flex-direction:row-reverse}
+.log-entry.role-user .log-text{text-align:left;display:inline-block;background:rgba(229,149,74,.10);border:1px solid rgba(229,149,74,.28);border-radius:14px;border-top-right-radius:4px;padding:8px 12px}
+.log-entry.role-user .image-preview{margin-left:auto}
 .log-entry.role-assistant{border-color:rgba(192,132,252,.4)}
 .log-entry.role-tool{border-color:rgba(202,138,4,.25)}
 
