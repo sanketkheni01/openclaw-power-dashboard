@@ -2,7 +2,9 @@
 
 A real-time web dashboard for monitoring all your OpenClaw sessions — active agents, cron jobs, group chats, and direct conversations.
 
-![Dashboard Screenshot](screenshot.png)
+> ⚠️ **Before contributing or pushing, read [RULES.md](RULES.md).** This is a private,
+> single-operator tool — **never commit screenshots, real session data, secrets, or PII.**
+> All such files are git-ignored; do not override.
 
 ## Features
 
@@ -19,8 +21,8 @@ A real-time web dashboard for monitoring all your OpenClaw sessions — active a
 ### 1. Clone
 
 ```bash
-git clone https://github.com/sanketkheni01/openclaw-sessions-dashboard.git
-cd openclaw-sessions-dashboard
+git clone https://github.com/sanketkheni01/openclaw-power-dashboard.git
+cd openclaw-power-dashboard
 ```
 
 ### 2. Configure paths
@@ -55,7 +57,7 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=/path/to/openclaw-sessions-dashboard
+WorkingDirectory=/path/to/openclaw-power-dashboard
 ExecStart=/usr/bin/python3 serve.py
 Restart=always
 RestartSec=3
