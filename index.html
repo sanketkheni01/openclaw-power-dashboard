@@ -2032,6 +2032,23 @@ function humanBytes(n) {
   return (n/1024/1024).toFixed(1) + 'M';
 }
 
+function renderImageAttachment(url) {
+  const u = escapeHtml(url || '');
+  return `<a href="${u}" target="_blank" rel="noopener"><img class="max-h-80 max-w-full cursor-zoom-in rounded border border-hair" src="${u}" loading="lazy" onerror="this.outerHTML='<span class=\'text-ink-4 text-[11px] font-mono\'>\u26a0 image unavailable: '+this.src+'</span>'" /></a>`;
+}
+
+function renderAttachment(c) {
+  const url = escapeHtml(c.url || '');
+  const name = escapeHtml(c.name || (c.url || '').split('/').pop() || 'file');
+  const kind = c.kind || 'file';
+  if (kind === 'image') return renderImageAttachment(c.url);
+  if (kind === 'audio') return `<div class="my-1"><div class="mb-1 font-mono text-[10px] uppercase tracking-[.1em] text-ink-4">\ud83c\udfb5 ${name}</div><audio controls preload="none" class="max-w-full" src="${url}"></audio></div>`;
+  if (kind === 'video') return `<div class="my-1"><video controls preload="none" class="max-h-80 max-w-full rounded border border-hair" src="${url}"></video></div>`;
+  // generic file: download/open chip
+  const icon = /\.pdf$/i.test(name) ? '\ud83d\udcc4' : /\.(zip|tar|gz)$/i.test(name) ? '\ud83d\udddc' : /\.(csv|md|txt|json)$/i.test(name) ? '\ud83d\udcdd' : '\ud83d\udcce';
+  return `<a href="${url}" target="_blank" rel="noopener" class="inline-flex items-center gap-2 rounded border border-hair bg-shelf px-2.5 py-1.5 font-mono text-[11px] text-ink-2 no-underline hover:border-accent hover:text-ink"><span>${icon}</span><span class="truncate max-w-[260px]">${name}</span><span class="text-ink-4">\u2197</span></a>`;
+}
+
 function renderToolResultBody(name, text, isErr) {
   if (text == null || text === '') return '<span class="text-ink-4 italic">(empty)</span>';
   const PREVIEW_LINES = 30;
@@ -2199,6 +2216,8 @@ function renderTranscript(entries) {
     if (role === 'user' && entryContent.some(c => c.type === 'text')) {
       flushToolBuf();
       const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n');
+      const userMedia = entryContent.filter(c => c.type === 'image' || c.type === 'attachment');
+      const pushUserMedia = () => { for (const c of userMedia) blocks.push({kind:'user', ts: entry.ts, html: c.type === 'image' ? renderImageAttachment(c.url) : renderAttachment(c)}); };
       const isInternal = /<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>|OCPlatform runtime context \(internal\)|\[Internal task completion event\]|\[Inter-session message\]/.test(text);
       const isLong = text.length > 600 || (text.match(/\n/g)||[]).length > 8;
       if (isInternal || isLong) {
@@ -2214,12 +2233,14 @@ function renderTranscript(entries) {
           </div>
           <div class="uc-body mt-1.5 whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-ink">${escapeHtml(text)}</div>
         </div>`});
+        pushUserMedia();
         continue;
       }
       blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-block rounded-md py-2 pl-3 pr-2.5">
         <div class="mb-1 flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-[.16em] text-amber"><span class="inline-block h-1.5 w-1.5 rounded-full bg-amber"></span>You</div>
         <div class="whitespace-pre-wrap break-words text-[14px] leading-relaxed text-ink">${escapeHtml(text)}</div>
       </div>`});
+      pushUserMedia();
       continue;
     }
 
@@ -2251,7 +2272,10 @@ function renderTranscript(entries) {
         </div>`});
       } else if (c.type === 'image') {
         flushToolBuf();
-        blocks.push({kind:'tool', ts: c.ts || entry.ts, html:`<img class="max-h-80 cursor-pointer rounded border border-hair" src="${escapeHtml(c.url)}" onclick="window.open('${escapeHtml(c.url)}','_blank')" onerror="this.outerHTML='<span class=text-ink-4>Image: '+this.src+'</span>'" />`});
+        blocks.push({kind:'tool', ts: c.ts || entry.ts, html: renderImageAttachment(c.url)});
+      } else if (c.type === 'attachment') {
+        flushToolBuf();
+        blocks.push({kind:'tool', ts: c.ts || entry.ts, html: renderAttachment(c)});
       }
     }
 

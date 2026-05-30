@@ -337,9 +337,14 @@ function renderTranscript(entries) {
         contentHtml += `<div class="log-text">${marked.parse(c.text || '')}</div>
           <button class="copy-btn" onclick="copyText(${JSON.stringify(c.text || '')})">copy</button>`;
       } else if (c.type === 'image') {
-        contentHtml += `<img class="image-preview" src="${escapeHtml(c.url)}"
-          onclick="window.open('${escapeHtml(c.url)}','_blank')"
-          onerror="this.outerHTML='<span style=color:var(--text-muted)>Image: '+this.src+'</span>'" />`;
+        contentHtml += `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener"><img class="image-preview" src="${escapeHtml(c.url)}" loading="lazy"
+          onerror="this.outerHTML='<span style=color:var(--text-muted)>\u26a0 image unavailable</span>'" /></a>`;
+      } else if (c.type === 'attachment') {
+        const u = escapeHtml(c.url||''), nm = escapeHtml(c.name || (c.url||'').split('/').pop() || 'file'), k = c.kind||'file';
+        if (k === 'image') contentHtml += `<a href="${u}" target="_blank" rel="noopener"><img class="image-preview" src="${u}" loading="lazy" onerror="this.outerHTML='<span style=color:var(--text-muted)>\u26a0 image unavailable</span>'" /></a>`;
+        else if (k === 'audio') contentHtml += `<audio controls preload="none" style="max-width:100%" src="${u}"></audio>`;
+        else if (k === 'video') contentHtml += `<video controls preload="none" style="max-height:320px;max-width:100%;border-radius:6px" src="${u}"></video>`;
+        else contentHtml += `<a href="${u}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:var(--mono);font-size:11px;color:var(--text-secondary);text-decoration:none">\ud83d\udcce ${nm} \u2197</a>`;
       } else if (c.type === 'thinking') {
         contentHtml += `<div class="thinking-block">${escapeHtml(c.text)}</div>`;
       }

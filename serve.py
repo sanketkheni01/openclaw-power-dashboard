@@ -802,6 +802,58 @@ def normalize_content(content):
         return [{'type': 'text', 'text': content}]
     return content if isinstance(content, list) else []
 
+import re as _re
+_MEDIA_ATTACH_RE = _re.compile(r'\[media attached:\s*([^\]]+)\]')
+_MEDIA_URL_RE = _re.compile(r'media://(\S+?\.[a-zA-Z0-9]+)')
+_IMG_EXT = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg')
+_AUDIO_EXT = ('.ogg', '.mp3', '.wav', '.m4a')
+_VIDEO_EXT = ('.mp4', '.webm', '.mov')
+
+def _media_url_to_http(u):
+    """media://inbound/<file>  ->  /media/inbound/<file> (served by _serve_media)."""
+    if not u:
+        return ''
+    if u.startswith('media://'):
+        return '/media/' + u[len('media://'):]
+    return u
+
+def _kind_for_ext(path):
+    p = path.lower()
+    if p.endswith(_IMG_EXT):
+        return 'image'
+    if p.endswith(_AUDIO_EXT):
+        return 'audio'
+    if p.endswith(_VIDEO_EXT):
+        return 'video'
+    return 'file'
+
+def _extract_image_media(c):
+    """Normalize an image content block into a renderable attachment.
+    Handles inline base64 ({data, mimeType}), {source:{url}}, {url}, {image}."""
+    src = c.get('source', {}) if isinstance(c.get('source'), dict) else {}
+    url = src.get('url', '') or c.get('url', '') or c.get('image', '')
+    data = c.get('data') or src.get('data') or ''
+    if url:
+        return {'type': 'image', 'url': _media_url_to_http(url)}
+    if data:
+        mime = c.get('mimeType') or src.get('mimeType') or c.get('mediaType') or src.get('media_type') or 'image/jpeg'
+        if not str(data).startswith('data:'):
+            data = f'data:{mime};base64,{data}'
+        return {'type': 'image', 'url': data, 'inline': True}
+    return None
+
+def _extract_media_attachments(txt):
+    """Pull [media attached: ...] / media:// refs out of message text into attachments."""
+    out = []
+    seen = set()
+    for m in _MEDIA_URL_RE.findall(txt or ''):
+        if m in seen:
+            continue
+        seen.add(m)
+        href = _media_url_to_http('media://' + m)
+        out.append({'type': 'attachment', 'kind': _kind_for_ext(m), 'url': href, 'name': m.split('/')[-1]})
+    return out
+
 def parse_transcript_entry(entry):
     """Convert a persisted session jsonl event into dashboard transcript entry.
 
@@ -824,17 +876,21 @@ def parse_transcript_entry(entry):
         tool_call_id = msg.get('toolCallId', '')
         tool_name = msg.get('toolName', '?')
         result_text = ''
+        result_atts = []
         for c in content:
             if c.get('type') == 'text':
                 result_text = c.get('text', '')[:4000]
+                result_atts = _extract_media_attachments(result_text)
                 break
             if c.get('type') == 'image':
-                src = c.get('source', {})
-                url = src.get('url', '') or c.get('url', '') or c.get('image', '')
-                if url:
-                    result_text = f'[IMAGE: {url}]'
+                media = _extract_image_media(c)
+                if media:
+                    result_text = f"[IMAGE: {media.get('url') or 'inline'}]"
+                    result_atts = [media]
                     break
         parsed.append({'type': 'result', 'name': tool_name, 'text': result_text, 'id': tool_call_id})
+        for a in result_atts:
+            parsed.append(a)
     else:
         for c in content:
             t = c.get('type', '')
@@ -844,13 +900,17 @@ def parse_transcript_entry(entry):
                     args = {k: (v[:2000] + '…' if isinstance(v, str) and len(v) > 2000 else v) for k, v in args.items()}
                 parsed.append({'type': 'tool', 'name': c.get('name','?'), 'args': args, 'id': c.get('id','')})
             elif t == 'image':
-                src = c.get('source', {})
-                url = src.get('url', '') or c.get('url', '') or c.get('image', '')
-                parsed.append({'type': 'image', 'url': url})
+                media = _extract_image_media(c)
+                if media:
+                    parsed.append(media)
             elif t == 'text':
                 txt = c.get('text', '')
                 if txt.strip():
+                    # Extract any [media attached: media://inbound/...] refs into renderable attachments
+                    atts = _extract_media_attachments(txt)
                     parsed.append({'type': 'text', 'text': txt[:5000]})
+                    for a in atts:
+                        parsed.append(a)
             elif t == 'thinking':
                 thinking = c.get('thinking', '')
                 if thinking:
@@ -2386,8 +2446,51 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             
             self._send_json_gzipped(response_data, etag)
             return
+
+        # ── Serve inbound media (images / files attached in chats) ──
+        if self.path.startswith('/media/inbound/'):
+            self._serve_media(self.path[len('/media/'):])
+            return
+
         super().do_GET()
-    
+
+    def _serve_media(self, rel):
+        """Safely serve a file from /root/.openclaw/media/ (read-only, no traversal)."""
+        from urllib.parse import unquote
+        MEDIA_ROOT = '/root/.openclaw/media'
+        rel = unquote(rel.split('?')[0].split('#')[0]).lstrip('/')
+        full = os.path.normpath(os.path.join(MEDIA_ROOT, rel))
+        # Path-traversal guard: resolved path must stay inside MEDIA_ROOT
+        if not (full == MEDIA_ROOT or full.startswith(MEDIA_ROOT + os.sep)):
+            self.send_response(403); self.end_headers(); self.wfile.write(b'forbidden'); return
+        if not os.path.isfile(full):
+            self.send_response(404); self.end_headers(); self.wfile.write(b'not found'); return
+        ext = os.path.splitext(full)[1].lower()
+        ctype = {
+            '.png':'image/png', '.jpg':'image/jpeg', '.jpeg':'image/jpeg', '.gif':'image/gif',
+            '.webp':'image/webp', '.svg':'image/svg+xml', '.bmp':'image/bmp',
+            '.ogg':'audio/ogg', '.mp3':'audio/mpeg', '.wav':'audio/wav', '.m4a':'audio/mp4',
+            '.mp4':'video/mp4', '.webm':'video/webm', '.mov':'video/quicktime',
+            '.pdf':'application/pdf', '.txt':'text/plain; charset=utf-8',
+            '.md':'text/markdown; charset=utf-8', '.csv':'text/csv; charset=utf-8',
+            '.json':'application/json', '.zip':'application/zip',
+        }.get(ext, 'application/octet-stream')
+        try:
+            with open(full, 'rb') as fh:
+                data = fh.read()
+            self.send_response(200)
+            self.send_header('Content-Type', ctype)
+            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Cache-Control', 'public, max-age=3600')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            # Inline display for media; downloadable name for documents
+            if ctype in ('application/octet-stream','application/zip','application/pdf'):
+                self.send_header('Content-Disposition', f'inline; filename="{os.path.basename(full)}"')
+            self.end_headers()
+            self.wfile.write(data)
+        except Exception as e:
+            self.send_response(500); self.end_headers(); self.wfile.write(str(e).encode())
+
     def _json_response(self, status_code, data):
         """Send a JSON response with given status code."""
         raw = json.dumps(data).encode('utf-8')

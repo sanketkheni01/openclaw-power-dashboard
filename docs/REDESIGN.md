@@ -271,3 +271,30 @@ horizontal padding → double gutter + dead right-side strip. Removed the overri
 (rows span edge-to-edge with their own internal padding — standard in VSCode/Linear/etc.).
 Re-adding panel padding would literally reintroduce the dead gap Sanket flagged. So this is a
 **deliberate waiver**: visual correctness > linter. index.html otherwise clean.
+
+---
+
+## Media support — show images & files in transcripts (2026-05-30)
+
+Added rendering of images and file attachments in the dashboard transcript.
+
+**Backend (`serve.py`):**
+- New `/media/inbound/<file>` route (`_serve_media`) serves files from `/root/.openclaw/media/`
+  with a path-traversal guard (resolved path must stay inside MEDIA_ROOT; raw + URL-encoded
+  `../` both return 403) and correct Content-Type for images/audio/video/pdf/docs.
+- `parse_transcript_entry` now extracts media via helpers:
+  - `_extract_image_media` — inline base64 `{type:image,data,mimeType}` → `data:` URL,
+    plus `{source:{url}}` / `{url}` / `{image}`; `media://inbound/x` → `/media/inbound/x`.
+  - `_extract_media_attachments` — pulls `[media attached: media://…]` refs out of user and
+    toolResult text into `{type:'attachment', kind, url, name}` (image/audio/video/file).
+
+**Frontend (`index.html` + `session.html`):**
+- New `renderImageAttachment` / `renderAttachment` (index) — inline `<img>` (click → open),
+  `<audio>`/`<video>` players, and a download chip for generic files. Same handling added to
+  session.html's renderer.
+- User-message media now renders too (previously the user branch `continue`d past it).
+
+**Verified:** `/media/inbound/*.png` → 200 image/png; traversal → 403; inline base64 user
+image renders inline (natural 1200×661, complete) in session detail view; `[media attached]`
+refs become attachment chips. No detector regressions (index keeps only the waived
+sessions-panel full-bleed flag; session.html CLEAN).
