@@ -1304,17 +1304,26 @@ def get_sessions_with_activity():
             else:
                 session['sessionType'] = 'other'
             
-            # Determine status
+            # Determine status.
+            # A session that has actually ended must never read as 'running' just because it
+            # was updated recently. Respect the runtime's own end signals first.
+            raw_status = str(s.get('status', '')).lower()
+            has_ended = bool(s.get('endedAt')) or raw_status in ('done', 'completed', 'ended', 'finished', 'error', 'aborted', 'failed', 'cancelled', 'canceled')
             age_ms = now - updated
-            if age_ms < 300000:  # 5 min
+            if has_ended:
+                if s.get('abortedLastRun') or raw_status in ('error', 'aborted', 'failed', 'cancelled', 'canceled'):
+                    session['status'] = 'failed'
+                else:
+                    session['status'] = 'completed'
+            elif age_ms < 300000:  # 5 min
                 session['status'] = 'running'
             elif age_ms < 3600000:  # 1 hour
                 session['status'] = 'idle'
             else:
                 session['status'] = 'completed'
             
-            # Get activity only for ACTIVE sessions (5 min window, not 2 hours)
-            if now - updated < 300000 and sid:
+            # Get activity only for genuinely ACTIVE sessions (running, not ended)
+            if session['status'] == 'running' and sid:
                 activity = get_recent_activity(sid)
                 if activity:
                     session['activity'] = activity

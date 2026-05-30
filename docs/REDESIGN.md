@@ -370,3 +370,15 @@ dimmed with static dots, left timeline guide.
   show last-message preview.
 - New `.sa-feed*` CSS + `ls-dot` (static) icon variant in liveStatusInner.
 Verified live with feed-test sub-agent: 5 feed rows, 1 active spinner, dimmed history.
+
+---
+
+## Fix: ended sessions no longer show as "running" (2026-05-30)
+
+Dashboard status was purely age-based (updated <5min → running), so a sub-agent/session that
+had genuinely *ended* still appeared running/active for up to 5 min. Now we respect the runtime's
+own end signals first: if `endedAt` is set or raw `status` ∈ {done, completed, ended, error,
+aborted, …}, the session is marked completed (or `failed` if aborted/error) regardless of recency.
+Only sessions with no end signal fall through to the age-based running/idle/completed logic.
+Activity feed is now fetched only for genuinely-running sessions.
+Verified: feed-test (ended 329s ago) now reads `completed`; live telegram sessions still `running`.
