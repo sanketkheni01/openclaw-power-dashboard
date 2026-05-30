@@ -131,3 +131,30 @@ sessions, stronger running dot.
 - Coordinated conceptually with the live-bridge subagent: I confined myself to
   `index.html` UI only, so backend/WS work won't conflict.
 - `index.html.backup` (old) and `index.html.predesign.bak` (mine) both retained.
+
+## Impeccable pass 2026-05-30
+
+Supervisor pass over the dashboard anti-pattern cleanup. Nested `sessions_list`/`sessions_spawn` tools were not available in this subagent runtime, so the supervisor independently verified the files and completed the remaining CSS/markup fixes directly instead of re-spawning page agents.
+
+### Page results
+
+| Page | Before | After | Notes |
+| --- | ---: | ---: | --- |
+| `index.html` | 7 | 0 | Added breathable chrome padding, removed clipping shells, normalized type steps/leading, removed glow artifacts. |
+| `cron.html` | 7 | 0 | Fixed stats/toolbar/detail header padding, removed green glow, normalized hierarchy and non-clipping layout. |
+| `session.html` | 2 | 0 | Removed body clipping and normalized readable type hierarchy. |
+| `system.html` | 2 | 0 | Fixed footer inset, replaced overused display face with a distinctive paired face, normalized type steps. |
+| `logs.html` | 4 | 0 | Fixed toolbar/footer insets, added font pairing, normalized log density/type hierarchy. |
+| `keys.html` | 6 | 0 | Raised muted contrast, paired fonts, normalized type hierarchy, fixed amber button contrast. |
+
+### Whole-repo result
+
+- `npx -y impeccable detect .` → **0 anti-patterns**.
+- `curl -s -o /dev/null -w '%{http_code}' localhost:3847/` → **200**.
+- Waivers: **none**.
+
+### Supervisor notes
+
+- Re-spawned agents: **none**. Page agents were not controllable from this subagent because nested session tooling was unavailable; remaining issues were fixed directly in CSS/markup.
+- Also cleaned the tracked archived viewer mockup (`outputs/viewer-ux/mockup.html`) and shared chrome (`cozy-theme.css`) so the whole-directory detector pass is clean, not just the six live pages.
+- Temporarily generated untracked local skill-cache directories (`.agents/`, `.claude/`) were moved out of the repo before the final whole-directory pass and commit so detector/vendor internals would not be committed or counted as product UI.

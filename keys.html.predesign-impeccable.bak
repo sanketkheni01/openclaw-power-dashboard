@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>API Keys — OpenClaw</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -14,8 +14,7 @@
   --ink:#e2e4e9;--ink-2:#9ca3af;--ink-3:#6b7280;--ink-4:#3d4452;
   --amber:#e5954a;--amber-dim:rgba(229,149,74,.15);--amber-glow:rgba(229,149,74,.08);
   --led-green:#4ade80;--led-yellow:#facc15;--led-red:#f87171;--led-blue:#60a5fa;
-  --mono:'JetBrains Mono',ui-monospace,monospace;
-  --display:'Trebuchet MS','Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',monospace;
   --radius:3px;
 }
 body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:100dvh;line-height:1.4;font-size:11px;-webkit-font-smoothing:antialiased}
@@ -23,11 +22,11 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 .header{padding:4px 16px;border-bottom:1px solid var(--wire);display:flex;align-items:center;justify-content:space-between;background:var(--panel);position:sticky;top:0;z-index:50;height:32px}
 .header h1{font-size:11px;font-weight:500;display:flex;align-items:center;gap:6px;color:var(--ink-2)}
 .header h1 .brand{color:var(--amber);font-weight:600}
-.back-link{color:var(--ink-3);text-decoration:none;font-size:11px;padding:2px 8px;border:1px solid var(--wire);border-radius:var(--radius);transition:color .12s,border-color .12s}
+.back-link{color:var(--ink-3);text-decoration:none;font-size:10px;padding:2px 8px;border:1px solid var(--wire);border-radius:var(--radius);transition:color .12s,border-color .12s}
 .back-link:hover{color:var(--ink-2);border-color:var(--wire-mid)}
 .header-right{display:flex;gap:4px;align-items:center}
-.refresh-badge{font-size:11px;color:var(--ink-4);font-variant-numeric:tabular-nums}
-.btn{background:transparent;border:1px solid var(--wire);color:var(--ink-3);padding:2px 8px;border-radius:var(--radius);cursor:pointer;font-size:11px;transition:border-color .12s,color .12s;font-family:var(--mono);display:flex;align-items:center;gap:3px}
+.refresh-badge{font-size:9px;color:var(--ink-4);font-variant-numeric:tabular-nums}
+.btn{background:transparent;border:1px solid var(--wire);color:var(--ink-3);padding:2px 8px;border-radius:var(--radius);cursor:pointer;font-size:10px;transition:border-color .12s,color .12s;font-family:var(--mono);display:flex;align-items:center;gap:3px}
 .btn:hover{border-color:var(--wire-mid);color:var(--ink-2)}
 .btn.primary{background:var(--amber);color:var(--hull);border-color:var(--amber);font-weight:600}
 .btn.primary:hover{opacity:.85}
@@ -38,13 +37,13 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 @media(max-width:900px){.container{grid-template-columns:1fr}}
 
 .section{background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
-.section-title{font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--wire);text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3)}
-.section-title .count{font-size:11px;color:var(--ink-4);font-weight:400}
+.section-title{font-size:9px;font-weight:600;display:flex;align-items:center;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--wire);text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3)}
+.section-title .count{font-size:9px;color:var(--ink-4);font-weight:400}
 
 .summary{display:flex;gap:16px;flex-wrap:wrap;padding:6px 10px;background:var(--hull);border-radius:var(--radius);border:1px solid var(--wire)}
 .summary-item{display:flex;flex-direction:column;gap:1px}
-.summary-label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px}
-.summary-value{font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.summary-label{font-size:8px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px}
+.summary-value{font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
 
 .key-card{background:var(--shelf);border:1px solid var(--wire);border-radius:var(--radius);padding:8px 10px;display:flex;align-items:center;gap:10px;transition:border-color .12s}
 .key-card:hover{border-color:var(--wire-mid)}
@@ -56,8 +55,8 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 .key-status-dot.gray{background:var(--ink-4)}
 .key-info{flex:1;min-width:0}
 .key-name{font-size:11px;font-weight:500}
-.key-meta{font-size:11px;color:var(--ink-4);display:flex;gap:6px;margin-top:1px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
-.key-position{font-size:11px;padding:0px 4px;border-radius:2px;font-weight:600;border:1px solid}
+.key-meta{font-size:9px;color:var(--ink-4);display:flex;gap:6px;margin-top:1px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.key-position{font-size:9px;padding:0px 4px;border-radius:2px;font-weight:600;border:1px solid}
 .key-position.on{background:var(--amber-glow);color:var(--amber);border-color:rgba(229,149,74,.2)}
 .key-position.off{background:rgba(248,113,113,.06);color:rgba(248,113,113,.6);border-color:rgba(248,113,113,.15)}
 .key-actions{display:flex;gap:3px;align-items:center}
@@ -65,12 +64,12 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 .key-toggle.on{background:var(--led-green);border-color:var(--led-green)}
 .key-toggle .knob{position:absolute;width:12px;height:12px;background:var(--ink);border-radius:50%;top:1px;left:1px;transition:transform .12s}
 .key-toggle.on .knob{transform:translateX(16px)}
-.key-move-btn{background:none;border:1px solid var(--wire);color:var(--ink-4);width:20px;height:20px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:11px;transition:color .12s,border-color .12s;font-family:var(--mono)}
+.key-move-btn{background:none;border:1px solid var(--wire);color:var(--ink-4);width:20px;height:20px;border-radius:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:10px;transition:color .12s,border-color .12s;font-family:var(--mono)}
 .key-move-btn:hover{color:var(--ink-2);border-color:var(--wire-mid)}
 .key-move-btn:disabled{opacity:.3;cursor:default}
-.key-test-btn{background:none;border:1px solid var(--wire);color:var(--ink-4);padding:1px 6px;border-radius:2px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:color .12s}
+.key-test-btn{background:none;border:1px solid var(--wire);color:var(--ink-4);padding:1px 6px;border-radius:2px;cursor:pointer;font-size:9px;font-family:var(--mono);transition:color .12s}
 .key-test-btn:hover{color:var(--ink-2)}
-.key-test-result{font-size:11px;min-width:16px;text-align:center}
+.key-test-result{font-size:10px;min-width:16px;text-align:center}
 .key-usage-bar{height:2px;border-radius:1px;background:var(--wire);width:60px;overflow:hidden}
 .key-usage-bar-fill{height:100%;border-radius:1px;transition:width .5s}
 
@@ -78,19 +77,19 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 .oauth-card:hover{border-color:var(--wire-mid)}
 .oauth-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
 .oauth-label{font-size:11px;font-weight:500;display:flex;align-items:center;gap:4px}
-.oauth-linked{font-size:11px;padding:0px 4px;background:var(--hull);border:1px solid var(--wire);border-radius:2px;color:var(--ink-3)}
-.oauth-sub-type{font-size:11px;color:var(--ink-4)}
+.oauth-linked{font-size:9px;padding:0px 4px;background:var(--hull);border:1px solid var(--wire);border-radius:2px;color:var(--ink-3)}
+.oauth-sub-type{font-size:9px;color:var(--ink-4)}
 .oauth-actions{display:flex;gap:3px}
 .oauth-usage-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
 @media(max-width:500px){.oauth-usage-grid{grid-template-columns:1fr}}
 .usage-item{display:flex;flex-direction:column;gap:2px}
-.usage-label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.3px;display:flex;justify-content:space-between}
+.usage-label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.3px;display:flex;justify-content:space-between}
 .usage-bar{height:4px;background:var(--hull);border-radius:2px;overflow:hidden}
 .usage-fill{height:100%;border-radius:2px;transition:width .5s}
-.usage-reset{font-size:11px;color:var(--ink-4)}
-.usage-value{font-size:11px;color:var(--ink-2);font-weight:500}
-.oauth-extra{font-size:11px;color:var(--ink-3);margin-top:4px;padding:4px 8px;background:var(--hull);border-radius:2px}
-.oauth-error{font-size:11px;color:rgba(248,113,113,.8);padding:4px 0}
+.usage-reset{font-size:8px;color:var(--ink-4)}
+.usage-value{font-size:10px;color:var(--ink-2);font-weight:500}
+.oauth-extra{font-size:10px;color:var(--ink-3);margin-top:4px;padding:4px 8px;background:var(--hull);border-radius:2px}
+.oauth-error{font-size:10px;color:rgba(248,113,113,.8);padding:4px 0}
 .oauth-login-btn{background:var(--amber);color:var(--hull);border:none;padding:6px 14px;border-radius:var(--radius);cursor:pointer;font-size:11px;font-weight:600;font-family:var(--mono);transition:opacity .12s;display:flex;align-items:center;gap:4px;width:100%;justify-content:center}
 .oauth-login-btn:hover{opacity:.85}
 .oauth-code-input{display:flex;gap:6px;align-items:center}
@@ -98,25 +97,25 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 .oauth-code-input input::placeholder{color:var(--ink-4)}
 .oauth-code-input input:focus{outline:none;border-color:var(--amber)}
 .edit-form{margin:6px 0;padding:8px;background:var(--hull);border-radius:var(--radius);display:flex;flex-direction:column;gap:6px}
-.edit-form label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px}
+.edit-form label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px}
 .edit-form input,.edit-form select{width:100%;padding:3px 6px;background:var(--shelf);border:1px solid var(--wire);border-radius:2px;color:var(--ink-2);font-size:11px;font-family:var(--mono);margin-top:2px}
 .edit-form input:focus,.edit-form select:focus{outline:none;border-color:var(--amber)}
 .edit-form .btn-row{display:flex;gap:3px}
 
 details{margin-top:4px}
-details summary{font-size:11px;color:var(--ink-4);cursor:pointer;user-select:none}
-details pre{font-size:11px;color:var(--ink-3);background:var(--hull);padding:4px;border-radius:2px;margin-top:3px;overflow-x:auto;max-height:180px}
+details summary{font-size:9px;color:var(--ink-4);cursor:pointer;user-select:none}
+details pre{font-size:8px;color:var(--ink-3);background:var(--hull);padding:4px;border-radius:2px;margin-top:3px;overflow-x:auto;max-height:180px}
 
 .toast-container{position:fixed;top:8px;right:8px;z-index:100;display:flex;flex-direction:column;gap:4px}
 .toast{background:var(--shelf);border:1px solid var(--wire-mid);border-radius:var(--radius);padding:6px 10px;min-width:220px;max-width:320px;display:flex;align-items:center;gap:6px;transform:translateX(120%);opacity:0;transition:transform .15s,opacity .15s}
 .toast.show{transform:translateX(0);opacity:1}
 .toast.success{border-color:rgba(74,222,128,.3)}.toast.error{border-color:rgba(248,113,113,.3)}.toast.info{border-color:rgba(229,149,74,.3)}
-.toast-icon{font-size:14px;flex-shrink:0}
+.toast-icon{font-size:12px;flex-shrink:0}
 .toast.success .toast-icon{color:rgba(74,222,128,.8)}.toast.error .toast-icon{color:rgba(248,113,113,.8)}.toast.info .toast-icon{color:rgba(229,149,74,.8)}
-.toast-title{font-weight:600;font-size:11px}.toast-message{font-size:11px;color:var(--ink-3)}
-.toast-close{background:none;border:none;color:var(--ink-4);cursor:pointer;font-size:14px;padding:0;width:16px;height:16px;font-family:var(--mono)}
+.toast-title{font-weight:600;font-size:10px}.toast-message{font-size:9px;color:var(--ink-3)}
+.toast-close{background:none;border:none;color:var(--ink-4);cursor:pointer;font-size:12px;padding:0;width:16px;height:16px;font-family:var(--mono)}
 
-.disabled-label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
+.disabled-label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:1px;margin-top:4px}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 .pulse{animation:pulse 2s infinite}
@@ -125,42 +124,21 @@ details pre{font-size:11px;color:var(--ink-3);background:var(--hull);padding:4px
 .anthropic-key-card{background:var(--shelf);border:1px solid rgba(229,149,74,.2);border-radius:var(--radius);padding:12px 14px}
 .ak-row{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .ak-info{flex:1}
-.ak-label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
-.ak-value{font-size:18px;font-weight:600;color:var(--ink);letter-spacing:1px;font-variant-numeric:tabular-nums}
-.ak-meta{font-size:11px;color:var(--ink-4);margin-top:2px}
+.ak-label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
+.ak-value{font-size:14px;font-weight:600;color:var(--ink);letter-spacing:1px;font-variant-numeric:tabular-nums}
+.ak-meta{font-size:9px;color:var(--ink-4);margin-top:2px}
 .ak-actions{display:flex;gap:4px}
 .ak-edit-form{margin-top:10px;padding-top:10px;border-top:1px solid var(--wire)}
-.ak-edit-form label{font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px}
+.ak-edit-form label{font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px}
 .ak-input-row{display:flex;gap:4px;margin-bottom:8px}
-.ak-input-row input{flex:1;padding:6px 8px;background:var(--hull);border:1px solid var(--wire);border-radius:var(--radius);color:var(--ink);font-size:14px;font-family:var(--mono)}
+.ak-input-row input{flex:1;padding:6px 8px;background:var(--hull);border:1px solid var(--wire);border-radius:var(--radius);color:var(--ink);font-size:12px;font-family:var(--mono)}
 .ak-input-row input:focus{outline:none;border-color:var(--amber)}
 .ak-input-row input::placeholder{color:var(--ink-4)}
 .ak-btn-row{display:flex;gap:4px}
-.ak-status{margin-top:8px;font-size:11px;padding:4px 8px;border-radius:var(--radius);display:none}
+.ak-status{margin-top:8px;font-size:10px;padding:4px 8px;border-radius:var(--radius);display:none}
 .ak-status.success{display:block;background:rgba(74,222,128,.08);color:var(--led-green);border:1px solid rgba(74,222,128,.2)}
 .ak-status.error{display:block;background:rgba(248,113,113,.08);color:var(--led-red);border:1px solid rgba(248,113,113,.2)}
 .ak-status.loading{display:block;background:rgba(229,149,74,.08);color:var(--amber);border:1px solid rgba(229,149,74,.2)}
-
-/* ── Impeccable redesign: graphite-tinted ink, display/mono pairing, real type steps ── */
-/* Muted ink raised to AA on the graphite hull scale (DESIGN.md graphite neutrals) */
-:root{--ink-3:#9ca3af;--ink-4:#828995}
-
-/* Space Grotesk display face on titles / wordmark / card names; mono stays for telemetry */
-.header h1,.section-title,.key-name,.oauth-label,.ak-value,.summary-value{font-family:var(--display);letter-spacing:-.01em}
-.header h1 .brand{letter-spacing:.04em}
-
-/* Real type hierarchy: 11 (label/mono) · 14 (body) · 18 (card names) · 24 (page title) */
-.header h1{font-size:18px;font-weight:600}
-.section-title{font-size:18px}
-.key-name,.oauth-label{font-size:18px;font-weight:600}
-.summary-value{font-size:24px}
-.ak-value{font-size:24px}
-
-/* Dark text on amber actions for AA contrast */
-.btn.primary,.oauth-login-btn,button[style*="background:var(--amber)"]{color:#111827}
-
-
-.header h1,.section-title,.key-name,.oauth-label,.ak-value,.summary-value{font-family:'Trebuchet MS','Aptos','Segoe UI',sans-serif!important}
 </style>
 </head>
 <body>
@@ -274,7 +252,7 @@ function renderKeys() {
   document.getElementById('keysSummary').innerHTML = `
     <div class="summary-item"><span class="summary-label">active</span><span class="summary-value">${summary.activeKeys||0}/${summary.totalKeys||0}</span></div>
     <div class="summary-item"><span class="summary-label">errors</span><span class="summary-value" ${(summary.totalErrors||0)>0?'style="color:var(--led-red)"':''}>${summary.totalErrors||0}</span></div>
-    <div class="summary-item"><span class="summary-label">last rotation</span><span class="summary-value" style="font-size:11px">${summary.lastRotation ? timeAgo(summary.lastRotation) : '—'}</span></div>
+    <div class="summary-item"><span class="summary-label">last rotation</span><span class="summary-value" style="font-size:10px">${summary.lastRotation ? timeAgo(summary.lastRotation) : '—'}</span></div>
   `;
 
   let html = enabled.map((k,i) => keyCard(k, i, true, enabled.length)).join('');
@@ -333,7 +311,7 @@ function renderOAuth() {
   let loginHtml = '';
   if (oauthPending?.step === 'code') {
     loginHtml = `<div style="margin-top:4px">
-      <div style="font-size:11px;color:var(--ink-3);margin-bottom:3px">paste authorization code:</div>
+      <div style="font-size:10px;color:var(--ink-3);margin-bottom:3px">paste authorization code:</div>
       <div class="oauth-code-input">
         <input type="text" id="oauthCodeInput" placeholder="code#state" onkeydown="if(event.key==='Enter')completeOAuth()">
         <button class="btn primary" onclick="completeOAuth()">connect</button>
@@ -343,12 +321,12 @@ function renderOAuth() {
   } else if (oauthPending?.step === 'label') {
     const keyOpts = allKeyProfiles.map(k => `<option value="${esc(k)}">${esc(k.split(':').pop())}</option>`).join('');
     loginHtml = `<div style="margin-top:4px">
-      <div style="font-size:11px;color:var(--ink-3);margin-bottom:3px">connected — name this account:</div>
+      <div style="font-size:10px;color:var(--ink-3);margin-bottom:3px">connected — name this account:</div>
       <div class="oauth-code-input">
         <input type="text" id="oauthLabelInput" placeholder="email or label" onkeydown="if(event.key==='Enter')saveOAuthLabel()">
         <button class="btn primary" onclick="saveOAuthLabel()">save</button>
       </div>
-      <div style="margin-top:4px"><label style="font-size:11px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px">link to key</label>
+      <div style="margin-top:4px"><label style="font-size:9px;color:var(--ink-4);text-transform:uppercase;letter-spacing:.5px">link to key</label>
         <select id="oauthLinkKey" style="width:100%;margin-top:2px;padding:3px 6px;background:var(--shelf);border:1px solid var(--wire);border-radius:2px;color:var(--ink-2);font-size:11px;font-family:var(--mono)">
           <option value="">none</option>${keyOpts}
         </select>
@@ -422,8 +400,8 @@ function oauthCard(email, data) {
     <div class="oauth-header">
       <div class="oauth-label">● ${esc(label)}${linkedKey ? ` <span class="oauth-linked">→ ${esc(linkedKey.split(':').pop())}</span>` : ''}${data.subscriptionType ? ` <span class="oauth-sub-type">(${esc(data.subscriptionType)})</span>` : ''}</div>
       <div class="oauth-actions">
-        <button class="btn" onclick="editingAccount={email:'${esc(email)}',label:'${esc(label)}',linkedKey:'${esc(linkedKey)}'};render()" style="font-size:11px;padding:1px 6px">edit</button>
-        <button class="btn danger" onclick="removeOAuth('${esc(email)}')" style="font-size:11px;padding:1px 6px">rm</button>
+        <button class="btn" onclick="editingAccount={email:'${esc(email)}',label:'${esc(label)}',linkedKey:'${esc(linkedKey)}'};render()" style="font-size:9px;padding:1px 6px">edit</button>
+        <button class="btn danger" onclick="removeOAuth('${esc(email)}')" style="font-size:9px;padding:1px 6px">rm</button>
       </div>
     </div>
     ${editHtml}
@@ -680,17 +658,17 @@ function setAkStatus(type, msg) {
 
 <div id="addKeyModal" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(0,0,0,.7);align-items:center;justify-content:center" onclick="if(event.target===this)hideAddKeyModal()">
   <div style="background:var(--panel);border:1px solid var(--shelf);border-radius:6px;padding:20px;width:360px;font-family:'JetBrains Mono',monospace">
-    <div style="color:var(--amber);font-size:14px;margin-bottom:14px;font-weight:600">+ ADD API KEY</div>
+    <div style="color:var(--amber);font-size:13px;margin-bottom:14px;font-weight:600">+ ADD API KEY</div>
     <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Name</label>
-    <input id="akName" placeholder="anthropic:my-key" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:14px;margin-bottom:10px">
+    <input id="akName" placeholder="anthropic:my-key" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
     <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Provider</label>
-    <select id="akProvider" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:14px;margin-bottom:10px">
+    <select id="akProvider" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
       <option value="anthropic">anthropic</option><option value="openai">openai</option><option value="google">google</option><option value="groq">groq</option><option value="openrouter">openrouter</option><option value="other">other</option>
     </select>
     <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">Mode</label>
-    <input id="akMode" value="token" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:14px;margin-bottom:10px">
+    <input id="akMode" value="token" style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:10px">
     <label style="color:var(--ink-3);font-size:11px;display:block;margin-bottom:4px">API Key</label>
-    <input id="akKey" type="password" placeholder="sk-..." style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:14px;margin-bottom:16px">
+    <input id="akKey" type="password" placeholder="sk-..." style="width:100%;box-sizing:border-box;background:var(--hull);border:1px solid var(--shelf);color:var(--ink-1);padding:6px 8px;border-radius:4px;font-family:inherit;font-size:12px;margin-bottom:16px">
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn" onclick="hideAddKeyModal()">cancel</button>
       <button class="btn" onclick="submitAddKey()" style="background:var(--amber);color:var(--hull)">add</button>

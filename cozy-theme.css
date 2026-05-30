@@ -166,7 +166,7 @@ a:hover{color:var(--accent-soft)}
 
 /* ── Status LEDs ──────────────────────────────────────────────────────── */
 .cz-led{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block;background:var(--text-muted)}
-.cz-led.green{background:var(--green);box-shadow:0 0 6px rgba(74,222,128,.5)}
+.cz-led.green{background:var(--green);box-shadow:none}
 .cz-led.green.live{animation:cozy-pulse 2.4s ease-in-out infinite}
 .cz-led.yellow{background:var(--yellow);opacity:.85}
 .cz-led.red{background:var(--red);box-shadow:0 0 6px rgba(248,113,113,.4)}
@@ -218,14 +218,14 @@ a:hover{color:var(--accent-soft)}
   min-width:220px;max-width:340px;
   padding:9px 12px;
   background:var(--bg-elevated);
-  border:1px solid var(--border-mid);border-left:2px solid var(--text-muted);
+  border:1px solid var(--border-mid);
   border-radius:var(--radius);box-shadow:var(--shadow-pop);
   transform:translateX(120%);opacity:0;transition:transform .18s ease,opacity .18s ease;
 }
 .cz-toast.show{transform:translateX(0);opacity:1}
-.cz-toast.success{border-left-color:var(--green)}
-.cz-toast.error{border-left-color:var(--red)}
-.cz-toast.info{border-left-color:var(--accent)}
+.cz-toast.success{border-color:rgba(74,222,128,.28)}
+.cz-toast.error{border-color:rgba(248,113,113,.28)}
+.cz-toast.info{border-color:rgba(229,149,74,.32)}
 .cz-toast-icon{font-size:12px;line-height:1.4;flex-shrink:0}
 .cz-toast.success .cz-toast-icon{color:var(--green)}
 .cz-toast.error .cz-toast-icon{color:var(--red)}

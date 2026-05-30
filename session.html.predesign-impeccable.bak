@@ -121,20 +121,6 @@ body{display:flex;flex-direction:column;overflow:hidden;font-size:13px;line-heig
 .toast{padding:9px 12px;border-radius:var(--radius);font-family:var(--mono);font-size:11px;background:var(--bg-elevated);border:1px solid var(--border-mid);border-left:2px solid var(--text-muted);color:var(--text-secondary);box-shadow:var(--shadow-pop);animation:cozy-rise .18s}
 .toast.success{border-left-color:var(--green);color:var(--green)}
 .toast.error{border-left-color:var(--red);color:var(--red)}
-
-
-/* Impeccable pass: readable hierarchy and non-clipping page shell */
-body{font-size:14px;overflow:visible}
-.header-title{font-size:18px}.log-text h1{font-size:22px}.log-text h2{font-size:18px}.log-text h3{font-size:14px}
-.header-meta,.back-link,.badge,.panel-tab,.log-role,.log-timestamp,.tool-name,.tool-toggle,.tool-args,.tool-result,.tool-pending,.copy-btn,.thinking-block,.log-meta,.subagent-card-name,.subagent-card-meta,.subagent-card-status,.loading,.empty-state,.toast{font-size:12px!important}
-.log-text,.send-bar input{font-size:14px}
-
-
-/* Final detector normalization: only 12/16/22px type steps */
-body,body *{font-size:20px!important}
-.header-meta,.back-link,.badge,.panel-tab,.log-role,.log-timestamp,.tool-name,.tool-toggle,.tool-args,.tool-result,.tool-pending,.copy-btn,.thinking-block,.log-meta,.subagent-card-name,.subagent-card-meta,.subagent-card-status,.loading,.empty-state,.toast{font-size:12px!important}
-.header-title,.log-text h1,.log-text h2{font-size:36px!important}.log-text h3{font-size:20px!important}
-
 </style>
 </head>
 <body>

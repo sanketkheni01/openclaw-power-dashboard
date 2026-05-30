@@ -910,31 +910,6 @@ body{
 .oauth-reset-time{font-size:9px;color:var(--text-muted)}
 .oauth-error{font-size:10px;color:rgba(220,38,38,.8);padding:3px 0}
 .oauth-extra{font-size:10px;color:var(--text-tertiary);margin-top:3px;padding:4px 6px;background:var(--bg-root);border-radius:2px}
-
-
-/* Impeccable pass: spacing, readable type, and non-clipping shell */
-body{font-size:14px;overflow:visible}
-.header{padding:12px 20px;min-height:48px;height:auto}
-.main-content{overflow:visible;min-height:0}
-.sessions-panel{padding:12px;overflow-y:auto;box-sizing:border-box}
-.panel-header{padding:12px 20px;min-height:48px;height:auto}
-.header h1,.panel-title{font-size:18px}
-.btn,.session-title,.log-text,.send-bar input{font-size:14px}
-.cost-value,.search-input,.search-icon,.view-toggle,.setting-label,.panel-tab,.subagent-card-name,.panel-meta,.tool-name,.tool-args,.tool-result,.loading-spinner,.empty-state p{font-size:12px}
-.cost-label,.api-key,.sort-select,.filter-btn,.breadcrumb-separator,.group-pill,.model-pill,.card-meta,.token-text,.activity-item,.activity-detail,.activity-time,.children-label,.expand-icon,.subagent-card-meta,.subagent-card-status,.log-role,.log-timestamp,.tool-toggle,.tool-pending,.copy-btn,.interruption-marker,.log-meta,.toast-title,.toast-message,.custom-resize-handle,.sys-stat-label,.sys-stat-val,.session-card .activity-action,.session-card .activity-time,.panel-meta .badge,.thinking-header,.thinking-header > span:nth-of-type(1),.thinking-header .think-caret{font-size:12px!important}
-.live-dot,.status-dot.status-running,.ws-indicator.connected,.ws-indicator.degraded{box-shadow:none!important}
-
-
-/* Final detector normalization: keep sizes on clear 12/16/22px steps */
-body,body *{font-size:20px!important}
-.cost-value,.cost-label,.api-key,.search-input,.search-icon,.view-toggle,.setting-label,.panel-tab,.subagent-card-name,.panel-meta,.tool-name,.tool-args,.tool-result,.loading-spinner,.empty-state p,.sort-select,.filter-btn,.breadcrumb-separator,.group-pill,.model-pill,.card-meta,.token-text,.activity-item,.activity-detail,.activity-time,.children-label,.expand-icon,.subagent-card-meta,.subagent-card-status,.log-role,.log-timestamp,.tool-toggle,.tool-pending,.copy-btn,.interruption-marker,.log-meta,.toast-title,.toast-message,.custom-resize-handle,.sys-stat-label,.sys-stat-val,.session-card .activity-action,.session-card .activity-time,.panel-meta .badge,.thinking-header,.thinking-header > span:nth-of-type(1),.thinking-header .think-caret{font-size:12px!important}
-.header h1,.panel-title,.log-text h1{font-size:36px!important}.log-text h2{font-size:20px!important}.log-text h3{font-size:20px!important}
-
-
-/* Final line-height guard for large normalized type */
-body,body *{line-height:1.5!important}
-.header,.panel-header{line-height:1.5!important}
-
 </style>
 </head>
 <body>
