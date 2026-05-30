@@ -339,6 +339,22 @@ body{
   min-width:0;
   transition:opacity .15s ease;
 }
+.subagents-rail{
+  width:288px;min-width:288px;max-width:288px;flex-shrink:0;
+  border-left:1px solid var(--border);
+  background:var(--bg-primary);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.sa-rail-header{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:12px 14px;border-bottom:1px solid var(--border);
+  position:sticky;top:0;background:var(--bg-primary);z-index:2;
+}
+.sa-rail-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-secondary);font-family:var(--mono);white-space:nowrap}
+.sa-rail-count{font-size:10px;color:var(--text-tertiary);font-family:var(--mono)}
+.sa-rail-count .running{color:var(--green)}
+.sa-rail-body{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:8px}
+.sa-rail-empty{text-align:center;color:var(--text-muted);padding:24px 12px;font-size:11px;line-height:1.5}
 .detail-panel.detached{
   position:fixed;top:0;left:0;right:0;
   width:100vw;height:100dvh;
@@ -1124,6 +1140,13 @@ body{font-size:14px;overflow:visible}
       </button>
     </div>
   </div>
+  <div class="subagents-rail" id="subagentsRail" style="display:none">
+    <div class="sa-rail-header">
+      <span class="sa-rail-title">sub-agents</span>
+      <span class="sa-rail-count" id="saRailCount"></span>
+    </div>
+    <div class="sa-rail-body" id="subagentsRailBody"></div>
+  </div>
 </div>
 
 <button class="jump-to-latest" id="jumpToLatest" onclick="jumpToLatest()">↓</button>
@@ -1392,6 +1415,7 @@ async function refreshData(forceFullLoad) {
     if (selectedSession) {
       const updatedSelected = allSessions.find(s => s.key === selectedSession.key || s.sessionId === selectedSession.sessionId);
       if (updatedSelected) selectedSession = updatedSelected;
+      renderSubagentsRail(selectedSession);
     }
     updateStats(data.stats || {});
     applyFiltersAndSort();
@@ -1874,6 +1898,7 @@ async function openSession(sessionKey, event) {
   const tabsEl = document.getElementById('panelTabs');
   tabsEl.style.display = hasSubagentChildren ? '' : 'none';
   switchPanelTab('transcript', tabsEl.querySelector('[data-tab="transcript"]'));
+  renderSubagentsRail(session);
   await loadTranscript(session.sessionId);
   if (window._transcriptInterval) clearInterval(window._transcriptInterval);
   window._transcriptInterval = setInterval(() => {
@@ -1892,18 +1917,28 @@ function switchPanelTab(tab, btn) {
   if (tab === 'subagents' && selectedSession) renderSubagentsPanel(selectedSession);
 }
 
-function renderSubagentsPanel(session) {
-  const container = document.getElementById('subagentsContainer');
+// Collect sub-agent sessions attached to a given session
+function collectSubagents(session) {
+  if (!session) return [];
   const isMain = session.key.endsWith(':main');
   const childKeys = (session.children || []).map(c => c.key);
-  const agents = allSessions.filter(s => {
+  return allSessions.filter(s => {
     if (s.sessionType !== 'subagent') return false;
     if (isMain) return true;
     if (s.parentKey === session.key) return true;
     if (childKeys.includes(s.key)) return true;
     return false;
-  }).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  }).sort((a, b) => {
+    // running first, then most recent
+    const ar = a.status === 'running' ? 1 : 0, br = b.status === 'running' ? 1 : 0;
+    if (ar !== br) return br - ar;
+    return (b.updatedAt || 0) - (a.updatedAt || 0);
+  });
+}
 
+function renderSubagentsPanel(session) {
+  const container = document.getElementById('subagentsContainer');
+  const agents = collectSubagents(session);
   if (!agents.length) {
     container.innerHTML = '<div style="text-align:center;color:var(--text-muted);padding:16px;font-size:10px">no sub-agents found</div>';
     return;
@@ -1911,9 +1946,37 @@ function renderSubagentsPanel(session) {
   renderSubagentCards(container, agents);
 }
 
-function renderSubagentCards(container, agents) {
+// Dedicated always-visible right rail listing sub-agents attached to the selected session
+function renderSubagentsRail(session) {
+  const rail = document.getElementById('subagentsRail');
+  const body = document.getElementById('subagentsRailBody');
+  const countEl = document.getElementById('saRailCount');
+  if (!rail || !body) return;
+  const agents = session ? collectSubagents(session) : [];
+  if (!agents.length) {
+    rail.style.display = 'none';
+    return;
+  }
+  rail.style.display = '';
   const runningN = agents.filter(s => s.status === 'running').length;
-  const header = `<div class="subagents-header">
+  const CAP = 20;
+  const shown = agents.slice(0, CAP);
+  const moreN = agents.length - shown.length;
+  countEl.innerHTML = runningN
+    ? `<span class="running">● ${runningN}</span> / ${agents.length}`
+    : `${agents.length}`;
+  renderSubagentCards(body, shown, { noHeader: true });
+  if (moreN > 0) {
+    const more = document.createElement('div');
+    more.style.cssText = 'text-align:center;color:var(--text-muted);font-size:10px;padding:6px;font-family:var(--mono)';
+    more.textContent = `+${moreN} older sub-agents`;
+    body.appendChild(more);
+  }
+}
+
+function renderSubagentCards(container, agents, opts = {}) {
+  const runningN = agents.filter(s => s.status === 'running').length;
+  const header = opts.noHeader ? '' : `<div class="subagents-header">
     <span><span class="count">${agents.length}</span> sub-agent${agents.length !== 1 ? 's' : ''}</span>
     ${runningN ? `<span class="running-count">● ${runningN} running</span>` : ''}
   </div>`;
@@ -1933,12 +1996,21 @@ function renderSubagentCards(container, agents) {
     if (ago) metaParts.push(`<span class="age">${ago}</span>`);
     if (channel) metaParts.push(`<span>${escapeHtml(channel)}</span>`);
     const meta = metaParts.join('<span class="sep">·</span>');
-    let preview = s.lastMessage || '';
-    if (!preview && s.activity && s.activity.length) {
-      const last = s.activity[s.activity.length - 1];
-      preview = last.detail || last.action || '';
+    // Running sub-agents get a live-status pill (with spinner if a tool is executing)
+    let liveHtml = '';
+    if (status === 'running' && s.activity && s.activity.length) {
+      const ls = normalizeActivity(s.activity[s.activity.length - 1]);
+      liveHtml = `<div class="live-status" style="margin-left:0">${liveStatusInner(ls)}</div>`;
     }
-    if (preview.length > 160) preview = preview.slice(0, 160) + '…';
+    let preview = '';
+    if (status !== 'running') {
+      preview = s.lastMessage || '';
+      if (!preview && s.activity && s.activity.length) {
+        const last = s.activity[s.activity.length - 1];
+        preview = last.detail || last.action || '';
+      }
+      if (preview.length > 160) preview = preview.slice(0, 160) + '…';
+    }
     const previewHtml = preview ? `<div class="subagent-card-preview">${escapeHtml(preview)}</div>` : '';
     return `<div class="subagent-card" onclick="openSession('${escapeHtml(s.key)}')">
       <div class="subagent-card-header">
@@ -1946,6 +2018,7 @@ function renderSubagentCards(container, agents) {
         <span class="subagent-card-status ${status}">${statusLabel}</span>
       </div>
       <div class="subagent-card-meta">${meta}</div>
+      ${liveHtml}
       ${previewHtml}
     </div>`;
   }).join('');
@@ -1984,6 +2057,8 @@ function formatToolArgPreview(name, args) {
 
 function closePanel() {
   document.getElementById('detailPanel').style.display = 'none';
+  const saRail = document.getElementById('subagentsRail');
+  if (saRail) saRail.style.display = 'none';
   selectedSession = null;
   if (window._transcriptInterval) { clearInterval(window._transcriptInterval); window._transcriptInterval = null; }
 }
@@ -2595,6 +2670,8 @@ function closeDetailPanel() {
   const panel = document.getElementById('detailPanel');
   panel.style.display = 'none';
   panel.classList.remove('detached');
+  const saRail = document.getElementById('subagentsRail');
+  if (saRail) saRail.style.display = 'none';
   document.getElementById('detailPlaceholder').style.display = '';
   document.getElementById('detachBtn').textContent = '⧉';
   selectedSession = null;

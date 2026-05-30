@@ -334,3 +334,23 @@ Verified live: cards show "Thinking" / "Responding" / tool names with live detai
 
 Verified: user bubbles right-aligned in both views (measured leftGap≫rightGap); live pill
 updates on WS events. No detector regressions.
+
+---
+
+## Dedicated sub-agents right rail (2026-05-30)
+
+New always-visible right-side panel (`.subagents-rail`, 288px) that lists sub-agents attached
+to the currently-open session — 3-column layout: sessions list | transcript | sub-agents rail.
+
+- `collectSubagents(session)`: gathers subagent sessions (main session → all; otherwise by
+  parentKey / children keys). Sorted running-first, then most recent.
+- `renderSubagentsRail(session)`: shows rail with header + count (`● N running / total`),
+  caps at 20 cards with a "+N older sub-agents" footer (main has 200+).
+- Running sub-agents show a live-status pill (reuses normalizeActivity/liveStatusInner — spinner
+  when a tool is executing, response text otherwise). Completed ones show last-message preview.
+- Live-updates via refreshData (each poll re-renders rail for selected session). Hidden when
+  no subagents or panel closed.
+- Reused for the existing "sub-agents" tab via shared collectSubagents + renderSubagentCards(opts).
+
+Verified: rail renders for main session (2 running at top, test-subagent DONE), header readable,
+20-card cap + footer. No new detector regressions.
