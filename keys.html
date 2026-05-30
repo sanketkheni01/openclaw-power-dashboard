@@ -36,6 +36,11 @@ body{font-family:var(--mono);background:var(--hull);color:var(--ink);min-height:
 
 .container{max-width:1400px;margin:0 auto;padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--wire)}
 @media(max-width:900px){.container{grid-template-columns:1fr}}
+@media(max-width:640px){
+  .header{height:auto;min-height:32px;flex-wrap:wrap;gap:4px 8px;padding:8px 12px}
+  .header-right{flex-wrap:wrap;gap:4px;justify-content:flex-end}
+  .refresh-badge{flex:0 0 auto}
+}
 
 .section{background:var(--panel);padding:14px 16px;display:flex;flex-direction:column;gap:10px}
 .section-title{font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;padding-bottom:6px;border-bottom:1px solid var(--wire);text-transform:uppercase;letter-spacing:.8px;color:var(--ink-3)}
@@ -149,12 +154,12 @@ details pre{font-size:11px;color:var(--ink-3);background:var(--hull);padding:4px
 .header h1,.section-title,.key-name,.oauth-label,.ak-value,.summary-value{font-family:var(--display);letter-spacing:-.01em}
 .header h1 .brand{letter-spacing:.04em}
 
-/* Real type hierarchy: 11 (label/mono) · 14 (body) · 18 (card names) · 24 (page title) */
-.header h1{font-size:18px;font-weight:600}
-.section-title{font-size:18px}
-.key-name,.oauth-label{font-size:18px;font-weight:600}
-.summary-value{font-size:24px}
-.ak-value{font-size:24px}
+/* Operator-density type scale: 10-11 (labels/mono) · 12.5 (body) · 13 (titles) · 18 (hero stat) */
+.header h1{font-size:13px;font-weight:600}
+.section-title{font-size:11px}
+.key-name,.oauth-label{font-size:13px;font-weight:600}
+.summary-value{font-size:18px}
+.ak-value{font-size:16px}
 
 /* Dark text on amber actions for AA contrast */
 .btn.primary,.oauth-login-btn,button[style*="background:var(--amber)"]{color:#111827}

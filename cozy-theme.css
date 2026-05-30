@@ -251,3 +251,12 @@ a:hover{color:var(--accent-soft)}
 
 .cz-hidden{display:none!important}
 .cz-tnum{font-variant-numeric:tabular-nums}
+
+/* ── Mobile topbar: prevent brand/nav overlap on narrow screens ───────── */
+@media(max-width:640px){
+  .cz-topbar{height:auto;min-height:44px;flex-wrap:wrap;gap:6px 10px;padding:8px 12px}
+  .cz-brand{font-size:13px;gap:7px}
+  .cz-nav{flex-wrap:nowrap;overflow-x:auto;gap:2px;-webkit-overflow-scrolling:touch;max-width:100%;scrollbar-width:none}
+  .cz-nav::-webkit-scrollbar{display:none}
+  .cz-nav a{padding:5px 8px;white-space:nowrap;flex:0 0 auto}
+}

@@ -208,3 +208,29 @@ the CLI sees it.
 - `npx impeccable detect <page>`: index/cron/session/system/logs = 0; keys = 1 (waived).
 - Service: localhost:3847 → /, /cron.html, /system.html, /logs.html, /keys, /session.html all 200.
 - Dynamic runtime classes (status-*, badge-*, role-*, log-*) preserved; no backend/JS/IDs touched.
+
+---
+
+## Visual-density correction — 2026-05-30 (webwright review)
+
+Rendered all 6 pages (desktop 1440×900 + mobile 390×844) via Playwright and reviewed
+the actual screenshots (`outputs/ui-review/shots/`). Passing `detect` ≠ looking good:
+the type-hierarchy rule (largest font must be ≥2× smallest) had pushed earlier passes to
+**inflate headings to 22–24px**, which looked oversized/"messed up" on a dense ops dashboard.
+
+### Fixed
+- **system.html:** card titles 24px → 13px uppercase labels; body/metrics 14px → 12–13px; process table 14px → 12px.
+- **cron.html:** stat values 22px → 18px; card/panel titles 17px → 14px.
+- **keys.html:** section/card titles 18–24px → 11–16px (operator scale).
+- **logs.html:** body/entries/controls 14px → 12px (denser log rows).
+- **Mobile header overlap (real bug, pre-existing):** shared `.cz-topbar` now wraps + nav scrolls horizontally on ≤640px (added to `cozy-theme.css`); keys.html's own `.header` got an equivalent ≤640px wrap rule. system/cron/keys mobile headers verified no longer colliding.
+- **cron mobile:** toolbar wraps, search goes full-width on ≤640px.
+
+### Deliberate waivers (density beats the linter)
+- **flat-type-hierarchy** on cron (1.8:1) and keys (1.5:1): hitting the 2.0 ratio would
+  require re-bloating headings to 20px+, the exact problem we just fixed. Waived on purpose.
+- **overused-font: space grotesk** (keys): DESIGN.md-mandated display face (as before).
+
+### Verify
+- index/system/logs/session = 0 detect issues; cron = 1 (waived); keys = 2 (waived).
+- All pages serve 200. Screenshots in `outputs/ui-review/shots/`.

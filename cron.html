@@ -21,7 +21,7 @@ body{display:flex;flex-direction:column;overflow:visible;font-size:13px;line-hei
   background:var(--bg-primary);border-bottom:1px solid var(--border);
 }
 .stat{display:flex;align-items:baseline;gap:7px;white-space:nowrap}
-.stat-value{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
+.stat-value{font-family:var(--mono);font-size:18px;font-weight:600;color:var(--accent);font-variant-numeric:tabular-nums;line-height:1}
 .stat-label{font-family:var(--mono);font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.1em}
 
 /* ── Toolbar ── */
@@ -82,7 +82,7 @@ body{display:flex;flex-direction:column;overflow:visible;font-size:13px;line-hei
 .card-header{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
 .card-title{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
 .card-name{
-  font-family:var(--display);font-size:17px;font-weight:600;letter-spacing:-.005em;
+  font-family:var(--display);font-size:14px;font-weight:600;letter-spacing:-.005em;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary);
 }
 .job-card:not(.spine-on) .card-name{color:var(--text-secondary);font-weight:500}
@@ -144,7 +144,7 @@ body{display:flex;flex-direction:column;overflow:visible;font-size:13px;line-hei
   background:var(--bg-secondary);border-bottom:1px solid var(--border);position:relative;
 }
 .panel-header::before{content:'';position:absolute;left:0;right:0;top:0;height:1px;background:linear-gradient(90deg,var(--accent),rgba(229,149,74,0) 40%)}
-.panel-title{font-family:var(--display);font-size:17px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)}
+.panel-title{font-family:var(--display);font-size:14px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-primary)}
 .panel-controls{display:flex;gap:4px;align-items:center}
 .panel-meta{
   flex-shrink:0;padding:10px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;
@@ -167,6 +167,11 @@ body{display:flex;flex-direction:column;overflow:visible;font-size:13px;line-hei
 @media(max-width:768px){
   .detail-panel{width:100vw}
   .grid-view{grid-template-columns:1fr!important}
+}
+@media(max-width:640px){
+  .stats-strip{gap:18px;padding:10px 12px}
+  .toolbar{flex-wrap:wrap;gap:8px;padding:10px 12px}
+  .search-box{flex:1 1 100%;max-width:none}
 }
 .hidden{display:none!important}
 
