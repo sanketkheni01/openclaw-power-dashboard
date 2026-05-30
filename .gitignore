@@ -1,3 +1,18 @@
+# Secrets / runtime state
 oauth-creds.json
 topic-names.json
 pinned.json
+.openclaw/
+
+# Generated screenshots & UI-review artifacts (may contain real session content — keep private)
+outputs/
+docs/redesign-shots/
+screenshot.png
+*.png
+*.jpg
+*.jpeg
+*.gif
+
+# Python
+__pycache__/
+*.pyc
