@@ -795,7 +795,45 @@ def find_session_files(session_id):
     files = []
     for pattern in patterns:
         files.extend(glob.glob(pattern))
-    return sorted(set(files), key=lambda f: ('.trajectory' in os.path.basename(f), f))
+    files = sorted(set(files), key=lambda f: ('.trajectory' in os.path.basename(f), f))
+    # Trajectory sidecars are large and contain no separately-renderable transcript
+    # entries when a real conversation .jsonl exists. Drop them to avoid parsing
+    # multi-MB files for nothing (huge speedup on big sessions).
+    conv = [f for f in files if '.trajectory' not in os.path.basename(f)]
+    return conv if conv else files
+
+def tail_lines(path, n, block=65536):
+    """Return roughly the last `n` non-empty lines of a file without reading it all.
+
+    Reads from EOF backwards in blocks until we have >= n newlines (plus a little
+    slack so the first returned line is whole). For big jsonl transcripts this turns
+    a full multi-MB parse into a small tail read.
+    """
+    try:
+        with open(path, 'rb') as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            if size == 0:
+                return []
+            data = b''
+            pos = size
+            newlines = 0
+            # +1 so we can drop a possibly-partial leading line
+            while pos > 0 and newlines <= n:
+                read = min(block, pos)
+                pos -= read
+                fh.seek(pos)
+                data = fh.read(read) + data
+                newlines = data.count(b'\n')
+            text = data.decode('utf-8', errors='replace')
+            lines = text.split('\n')
+            # If we didn't reach the start of file, the first fragment may be partial
+            if pos > 0 and len(lines) > 1:
+                lines = lines[1:]
+            lines = [l for l in lines if l.strip()]
+            return lines[-n:] if len(lines) > n else lines
+    except Exception:
+        return None
 
 def normalize_content(content):
     if isinstance(content, str):
@@ -2361,24 +2399,42 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
             entries = []
             used_files = []
+            # Fast path: when returning the last N entries (default), tail-read each
+            # file instead of parsing the whole thing. Grab extra lines as slack since
+            # not every jsonl line yields a renderable entry. Only kick in for big files.
+            tail_only = (t_offset == -1)
+            tail_budget = max(t_limit * 4, 200)
+            was_truncated = False
             try:
                 # Merge all matching files. Some Telegram/topic sessions have both
                 # conversation jsonl and trajectory sidecar files; reading only the
                 # newest file can select the sidecar and make the UI show "no entries".
                 for f in sorted(files, key=os.path.getmtime):
                     file_had_entries = False
-                    with open(f, 'r', errors='replace') as fh:
-                        for line in fh:
-                            line = line.strip()
-                            if not line:
-                                continue
-                            try:
-                                parsed_entry = parse_transcript_entry(json.loads(line))
-                            except Exception:
-                                continue
-                            if parsed_entry:
-                                entries.append(parsed_entry)
-                                file_had_entries = True
+                    src_lines = None
+                    if tail_only:
+                        try:
+                            if os.path.getsize(f) > 262144:  # >256KB: tail it
+                                src_lines = tail_lines(f, tail_budget)
+                                # If we got the full budget, there's almost certainly more above
+                                if src_lines is not None and len(src_lines) >= tail_budget:
+                                    was_truncated = True
+                        except Exception:
+                            src_lines = None
+                    if src_lines is None:
+                        with open(f, 'r', errors='replace') as fh:
+                            src_lines = fh.readlines()
+                    for line in src_lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            parsed_entry = parse_transcript_entry(json.loads(line))
+                        except Exception:
+                            continue
+                        if parsed_entry:
+                            entries.append(parsed_entry)
+                            file_had_entries = True
                     if file_had_entries:
                         used_files.append(os.path.basename(f))
             except Exception as e:
@@ -2398,13 +2454,25 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 paginated = entries[t_offset:t_offset + t_limit]
                 actual_offset = t_offset
 
+            # When we tail-read, `total` is only the count of tailed entries, not the
+            # whole session. Signal the client there's more history above so it can
+            # fetch the full transcript (offset=0) on scroll-to-top.
+            if tail_only and was_truncated:
+                has_more = True
+                total = -1  # unknown; client must do a full fetch to paginate older
+            elif t_offset == -1:
+                has_more = actual_offset > 0
+            else:
+                has_more = (t_offset + t_limit) < total
+
             data = json.dumps({
                 'file': used_files[-1] if len(used_files) == 1 else used_files,
                 'files': used_files,
                 'count': len(paginated),
                 'total': total,
                 'offset': actual_offset,
-                'hasMore': actual_offset > 0 if t_offset == -1 else (t_offset + t_limit) < total,
+                'tailed': tail_only and was_truncated,
+                'hasMore': has_more,
                 'entries': paginated
             })
             self._send_json_gzipped(data)

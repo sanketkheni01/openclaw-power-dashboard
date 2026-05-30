@@ -494,6 +494,7 @@ body{
 
 /* ── Loading ── */
 .loading-spinner{text-align:center;padding:32px;color:var(--text-muted);font-size:11px}
+.transcript-tail-banner{text-align:center;padding:8px 12px;margin:4px auto 10px;color:var(--text-tertiary);font-size:10.5px;font-family:var(--mono);background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-sm);max-width:880px;cursor:default}
 .spinner-dots{display:inline-flex;gap:3px;margin-left:6px}
 .spinner-dot{
   width:3px;height:3px;background:var(--accent);border-radius:50%;
@@ -1194,6 +1195,7 @@ let keyboardFocusIndex = -1;
 let lastDataTimestamp = 0;
 let sessionsEtag = null;
 let transcriptTotal = 0;
+let transcriptTailed = false;
 let transcriptOffset = 0;
 let transcriptEntries = [];
 let gatewayLiveConnected = false;
@@ -2129,16 +2131,54 @@ async function loadTranscript(sessionId) {
     const data = await response.json();
     if (data.error) { container.innerHTML = `<div class="loading-spinner">${data.error}</div>`; return; }
     transcriptEntries = data.entries || [];
+    transcriptTailed = !!data.tailed;
     transcriptTotal = data.total || transcriptEntries.length;
     transcriptOffset = data.offset || 0;
     renderTranscript(transcriptEntries);
     
-    if (transcriptOffset > 0) {
+    if (transcriptTailed) {
+      // Fast tail-load: full history fetched lazily when user scrolls to top
+      setupTranscriptTailExpand(sessionId, container);
+    } else if (transcriptOffset > 0) {
       setupTranscriptInfiniteScroll(sessionId, container);
     }
   } catch (error) {
     container.innerHTML = `<div class="loading-spinner">failed: ${error.message}</div>`;
   }
+}
+
+// For tail-loaded transcripts: fetch the FULL history once when the user scrolls to top.
+function setupTranscriptTailExpand(sessionId, container) {
+  let expanding = false, done = false;
+  // banner so it's obvious there's more above
+  const banner = document.createElement('div');
+  banner.className = 'transcript-tail-banner';
+  banner.textContent = '↑ showing recent messages — scroll up to load full history';
+  container.prepend(banner);
+  container._tailHandler = async () => {
+    if (expanding || done || container.scrollTop > 120) return;
+    expanding = true;
+    banner.textContent = 'loading full history…';
+    const prevHeight = container.scrollHeight;
+    try {
+      const r = await fetch(`/data/transcript/${sessionId}?offset=0&limit=100000`);
+      const d = await r.json();
+      if (d.entries && d.entries.length) {
+        transcriptEntries = d.entries;
+        transcriptTailed = false;
+        transcriptTotal = d.total || d.entries.length;
+        transcriptOffset = 0;
+        renderTranscript(transcriptEntries);
+        container.scrollTop = container.scrollHeight - prevHeight;
+      }
+      done = true;
+      container.removeEventListener('scroll', container._tailHandler);
+    } catch (e) {
+      banner.textContent = '↑ scroll up to load full history';
+    }
+    expanding = false;
+  };
+  container.addEventListener('scroll', container._tailHandler, { passive: true });
 }
 
 let _loadingMore = false;

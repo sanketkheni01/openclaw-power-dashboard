@@ -382,3 +382,24 @@ aborted, …}, the session is marked completed (or `failed` if aborted/error) re
 Only sessions with no end signal fall through to the age-based running/idle/completed logic.
 Activity feed is now fetched only for genuinely-running sessions.
 Verified: feed-test (ended 329s ago) now reads `completed`; live telegram sessions still `running`.
+
+---
+
+## Faster transcript loading — recent-only + skip trajectory sidecars (2026-05-30)
+
+Opening big sessions was slow because the transcript endpoint read & JSON-parsed the *entire*
+file(s) just to return the last 100 entries — and topic sessions also glob-matched a 10MB
+`.trajectory.jsonl` sidecar that yields **zero** renderable entries (pure waste).
+
+Two fixes:
+1. **Skip trajectory sidecars** in `find_session_files` when a real conversation `.jsonl` exists
+   (they're large + non-renderable). Biggest single win.
+2. **Tail-read** for the default last-N request: `tail_lines()` reads the file from EOF backwards
+   in blocks instead of parsing the whole thing. Only the recent window is JSON-parsed.
+
+Backend returns `tailed:true` + `hasMore` when truncated; `total:-1` (unknown). Frontend shows a
+"showing recent messages — scroll up to load full history" banner and lazily fetches the full
+transcript (offset=0) once on scroll-to-top (`setupTranscriptTailExpand`).
+
+Result (cold, page-cache dropped): topic-28627 1.5s → 0.26s; all big sessions ~0.25s. Entries
+render in correct order; full history still reachable by scrolling up.
