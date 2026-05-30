@@ -301,6 +301,8 @@ body{
 .activity-section{display:none!important}
 .live-status{display:flex;align-items:center;gap:7px;margin-top:5px;margin-left:15px;padding:3px 8px;border-radius:var(--radius-sm);background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.18);overflow:hidden}
 .live-status .ls-pulse{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(74,222,128,.6);flex-shrink:0;animation:pulse 1.4s ease-in-out infinite}
+.live-status .ls-spin{width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(74,222,128,.25);border-top-color:var(--green);flex-shrink:0;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
 .live-status .ls-action{font-size:10px;font-weight:600;color:var(--green);white-space:nowrap;flex-shrink:0;letter-spacing:.01em}
 .live-status .ls-detail{font-size:10px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;font-family:var(--mono)}
 .activity-item{font-size:10px;padding:1px 0;display:flex;gap:6px;align-items:baseline}
@@ -1651,19 +1653,48 @@ function deriveLiveStatus(entry) {
   if (!entry) return null;
   const content = entry.content || [];
   // Scan newest-first for the most telling signal
+  // Collect tool call ids that already have a result, so we can tell which tools are still running
+  const doneIds = new Set();
+  for (const c of content) { if (c.type === 'result' && c.id) doneIds.add(c.id); }
   for (let i = content.length - 1; i >= 0; i--) {
     const c = content[i];
-    if (c.type === 'result') return { action: `✅ ${c.name || 'tool'} done`, detail: (c.text || '').slice(0, 70) };
+    if (c.type === 'result') return { action: `${c.name || 'tool'} done`, detail: '', icon: 'done' };
     if (c.type === 'tool') {
       const a = c.args || {};
       const detail = a.command || a.query || a.url || a.action || '';
-      return { action: `🔧 ${c.name || 'tool'}`, detail: String(detail).slice(0, 70) };
+      const running = !(c.id && doneIds.has(c.id));
+      return { action: c.name || 'tool', detail: String(detail).slice(0, 70), icon: running ? 'spin' : 'tool', running };
     }
     if (c.type === 'text' && (c.text || '').trim() && c.text.trim() !== 'NO_REPLY')
-      return { action: '💬 Responding', detail: c.text.trim().slice(0, 80) };
-    if (c.type === 'thinking') return { action: '🧠 Thinking', detail: '' };
+      return { action: '', detail: c.text.trim().replace(/\s+/g, ' ').slice(0, 90), icon: 'pulse' };
+    if (c.type === 'thinking') return { action: 'Thinking', detail: '', icon: 'pulse' };
   }
   return null;
+}
+
+// Build the inner HTML of the live-status pill from a {action, detail, icon} status
+function liveStatusInner(ls) {
+  const ind = ls.icon === 'spin'
+    ? '<span class="ls-spin"></span>'
+    : ls.icon === 'done'
+      ? '<span class="ls-action" style="color:var(--green)">\u2705</span>'
+      : '<span class="ls-pulse"></span>';
+  const detailHtml = ls.detail ? `<span class="ls-detail">${escapeHtml(ls.detail)}</span>` : '';
+  const actionHtml = ls.action ? `<span class="ls-action">${escapeHtml(ls.action)}</span>` : '';
+  return `${ind}${actionHtml}${detailHtml}`;
+}
+
+// Normalize a backend activity entry ({action:"\ud83d\udd27 read", detail}) into {action, detail, icon}
+function normalizeActivity(act) {
+  if (!act) return { action: 'working', detail: '', icon: 'pulse' };
+  if (act.icon) return act; // already a derived (WS) status
+  const raw = String(act.action || '');
+  const detail = act.detail || '';
+  if (raw.startsWith('\u2705')) return { action: raw.replace(/^\u2705\s*/, ''), detail: '', icon: 'done' };
+  if (raw.startsWith('\ud83d\udd27')) return { action: raw.replace(/^\ud83d\udd27\s*/, ''), detail, icon: 'spin', running: true };
+  if (raw.startsWith('\ud83d\udcac')) return { action: '', detail: detail || 'Responding', icon: 'pulse' };
+  if (raw.startsWith('\ud83e\udde0')) return { action: 'Thinking', detail: '', icon: 'pulse' };
+  return { action: raw || 'working', detail: '', icon: 'pulse' };
 }
 
 // Instantly update (or inject) the live-status pill on a card from a live WS entry
@@ -1674,8 +1705,7 @@ function updateLiveStatusPill(card, session, entry) {
   session.status = 'running';
   session.activity = [...(session.activity || []), ls].slice(-3);
   let pill = card.querySelector('.live-status');
-  const detailHtml = ls.detail ? `<span class="ls-detail">${escapeHtml(ls.detail)}</span>` : '';
-  const inner = `<span class="ls-pulse"></span><span class="ls-action">${escapeHtml(ls.action)}</span>${detailHtml}`;
+  const inner = liveStatusInner(ls);
   if (pill) { pill.innerHTML = inner; }
   else {
     pill = document.createElement('div');
@@ -1710,10 +1740,8 @@ function createSessionCard(session, index) {
   // Live status: for running sessions, surface the latest action as a prominent line
   let liveStatusHtml = '';
   if (status === 'running' && activity.length) {
-    const cur = activity[activity.length - 1];
-    const action = cur.action || 'working';
-    const detail = cur.detail ? `<span class="ls-detail">${escapeHtml(cur.detail)}</span>` : '';
-    liveStatusHtml = `<div class="live-status"><span class="ls-pulse"></span><span class="ls-action">${escapeHtml(action)}</span>${detail}</div>`;
+    const ls = normalizeActivity(activity[activity.length - 1]);
+    liveStatusHtml = `<div class="live-status">${liveStatusInner(ls)}</div>`;
   }
   const activityHtml = activity.slice(0, 3).map(act => `
     <div class="activity-item">
