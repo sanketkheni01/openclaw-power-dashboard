@@ -299,6 +299,10 @@ body{
 .cost-display{display:none!important}
 
 .activity-section{display:none!important}
+.live-status{display:flex;align-items:center;gap:7px;margin-top:5px;margin-left:15px;padding:3px 8px;border-radius:var(--radius-sm);background:rgba(74,222,128,.07);border:1px solid rgba(74,222,128,.18);overflow:hidden}
+.live-status .ls-pulse{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(74,222,128,.6);flex-shrink:0;animation:pulse 1.4s ease-in-out infinite}
+.live-status .ls-action{font-size:10px;font-weight:600;color:var(--green);white-space:nowrap;flex-shrink:0;letter-spacing:.01em}
+.live-status .ls-detail{font-size:10px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;font-family:var(--mono)}
 .activity-item{font-size:10px;padding:1px 0;display:flex;gap:6px;align-items:baseline}
 .activity-action{color:var(--text-tertiary);font-weight:500;white-space:nowrap}
 .activity-detail{
@@ -1657,6 +1661,14 @@ function createSessionCard(session, index) {
   const groupName = getSessionGroup(session);
 
   const activity = session.activity || [];
+  // Live status: for running sessions, surface the latest action as a prominent line
+  let liveStatusHtml = '';
+  if (status === 'running' && activity.length) {
+    const cur = activity[activity.length - 1];
+    const action = cur.action || 'working';
+    const detail = cur.detail ? `<span class="ls-detail">${escapeHtml(cur.detail)}</span>` : '';
+    liveStatusHtml = `<div class="live-status"><span class="ls-pulse"></span><span class="ls-action">${escapeHtml(action)}</span>${detail}</div>`;
+  }
   const activityHtml = activity.slice(0, 3).map(act => `
     <div class="activity-item">
       <span class="activity-action">${act.action || '—'}</span>
@@ -1717,7 +1729,8 @@ function createSessionCard(session, index) {
         <span>${formatTime(session.updatedAt)} ago</span>
         <span>${session.sessionId ? session.sessionId.slice(0, 8) : '—'}</span>
       </div>
-      ${previewHtml}
+      ${liveStatusHtml}
+      ${liveStatusHtml ? '' : previewHtml}
       ${totalTokensCalc ? `
         <div class="token-summary">
           <div class="token-bar">

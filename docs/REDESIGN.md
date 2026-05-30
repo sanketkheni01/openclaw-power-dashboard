@@ -298,3 +298,17 @@ Added rendering of images and file attachments in the dashboard transcript.
 image renders inline (natural 1200×661, complete) in session detail view; `[media attached]`
 refs become attachment chips. No detector regressions (index keeps only the waived
 sessions-panel full-bleed flag; session.html CLEAN).
+
+---
+
+## Live activity status on running session cards (2026-05-30)
+
+Running sessions (updated < 5 min) now show a prominent green "live status" pill on their
+card in the rail, surfacing what the session is doing *right now* — pulled from the backend's
+existing `activity[]` array (last entry): 🧠 Thinking, 💬 Responding, 🔧 <tool>, ✅ <tool> done,
+plus the live detail (command/query/url/response snippet).
+
+- `.live-status` pill: green-tinted bg/border, pulsing dot, bold green action label, mono detail.
+- Only rendered for `status === 'running'` cards; replaces the generic preview line there.
+- Idle/completed cards unchanged (still show last-message preview).
+Verified live: cards show "Thinking" / "Responding" / tool names with live detail text.
