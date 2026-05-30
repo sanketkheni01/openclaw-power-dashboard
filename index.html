@@ -229,15 +229,35 @@ body{
 
 /* ── Session Card ── */
 .session-card{
+  --proximity:0;
+  --proximity-scale:1;
+  --proximity-shade:0;
   background:transparent;
   border:none;
   border-bottom:0.5px solid var(--border);
   padding:10px 16px;
   cursor:pointer;
-  transition:background .12s ease;
+  transition:background .12s ease,transform .16s cubic-bezier(.2,.8,.2,1),filter .16s ease;
   position:relative;
+  transform:translateZ(0) scale(var(--proximity-scale));
+  transform-origin:left center;
+  filter:brightness(calc(1 + var(--proximity) * .08));
+  will-change:transform,filter;
+}
+.session-card::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  background:linear-gradient(90deg, rgba(229,149,74,calc(var(--proximity-shade) * .55)), rgba(255,255,255,calc(var(--proximity-shade) * .16)) 42%, transparent 100%);
+  opacity:var(--proximity);
+  transition:opacity .16s ease;
 }
 .session-card:hover{background:var(--bg-secondary)}
+@media (prefers-reduced-motion: reduce){
+  .session-card{transform:none!important;filter:none!important;transition:background .12s ease}
+  .session-card::after{display:none}
+}
 .session-card.expanded{background:var(--bg-secondary)}
 .session-card.keyboard-focus{background:var(--bg-secondary);outline:none}
 .session-card.session-selected{background:rgba(229,149,74,.07);box-shadow:inset 2px 0 0 var(--accent)}
@@ -1152,10 +1172,73 @@ document.addEventListener('DOMContentLoaded', () => {
   initWebSocket();
   refreshData();
   setupKeyboardShortcuts();
+  setupProximityInteractions();
   setInterval(() => { if (settings.autoRefresh) refreshData(); }, 30000);
   fetchSystemStats();
   setInterval(fetchSystemStats, 15000);
 });
+
+function setupProximityInteractions() {
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const panel = document.querySelector('.sessions-panel');
+  const grid = document.getElementById('sessionsGrid');
+  if (!panel || !grid) return;
+
+  const radius = 150;
+  const maxScale = 0.022;
+  let pointer = null;
+  let raf = 0;
+
+  const reset = () => {
+    pointer = null;
+    grid.querySelectorAll('.session-card').forEach(card => {
+      card.style.removeProperty('--proximity');
+      card.style.removeProperty('--proximity-scale');
+      card.style.removeProperty('--proximity-shade');
+      card.style.removeProperty('z-index');
+    });
+  };
+
+  const apply = () => {
+    raf = 0;
+    if (!pointer || currentViewMode === 'timeline') return;
+
+    grid.querySelectorAll('.session-card').forEach(card => {
+      const rect = card.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      const centerY = rect.top + rect.height / 2;
+      const dx = Math.max(rect.left - pointer.x, 0, pointer.x - rect.right, Math.abs(pointer.x - centerX) * 0.18);
+      const dy = Math.abs(pointer.y - centerY);
+      const distance = Math.hypot(dx, dy);
+      const t = Math.max(0, 1 - distance / radius);
+
+      if (t < 0.015) {
+        card.style.setProperty('--proximity', '0');
+        card.style.setProperty('--proximity-scale', '1');
+        card.style.setProperty('--proximity-shade', '0');
+        card.style.removeProperty('z-index');
+        return;
+      }
+
+      card.style.setProperty('--proximity', t.toFixed(3));
+      card.style.setProperty('--proximity-scale', (1 + t * maxScale).toFixed(4));
+      card.style.setProperty('--proximity-shade', (t * 0.11).toFixed(4));
+      card.style.zIndex = String(Math.ceil(t * 10));
+    });
+  };
+
+  const schedule = () => {
+    if (!raf) raf = requestAnimationFrame(apply);
+  };
+
+  panel.addEventListener('pointermove', event => {
+    if (event.pointerType === 'touch') return;
+    pointer = { x: event.clientX, y: event.clientY };
+    schedule();
+  }, { passive: true });
+  panel.addEventListener('pointerleave', reset, { passive: true });
+  panel.addEventListener('scroll', schedule, { passive: true });
+}
 
 function loadSettings() {
   const saved = localStorage.getItem('dashboard-settings');
