@@ -926,7 +926,10 @@ body{font-size:14px;overflow:visible}
 
 
 /* Operator-density type scale (no global !important inflation) */
+/* Clear 3-tier hierarchy: 11 (labels/meta) · 13 (body) · 22 (focal heading) */
 .header h1,.panel-title{font-size:14px;font-weight:600}
+.empty-hero{font-size:22px;font-weight:600;letter-spacing:-.02em;font-family:var(--display)}
+.thinking-preview{font-size:11px}
 .log-text h1{font-size:15px}.log-text h2{font-size:13.5px}.log-text h3{font-size:13px}
 
 </style>
@@ -1070,7 +1073,7 @@ body{font-size:14px;overflow:visible}
     <div class="empty-bracket relative w-[380px] max-w-[82%] overflow-hidden rounded-lg bg-graphite border border-hair shadow-[0_24px_60px_rgba(0,0,0,.5)]">
       <div class="flex items-center gap-[9px] px-4 py-3.5 border-b border-hair">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="1.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-        <span class="font-display text-[15px] font-semibold tracking-[-.01em] text-ink">No session selected</span>
+        <span class="empty-hero text-ink">No session selected</span>
       </div>
       <div class="px-4 py-3 font-mono text-[11px] leading-relaxed text-ink-3">Select a session from the rail to stream its live transcript, tool calls and sub-agents.</div>
       <div class="px-4 pt-2.5 pb-3.5 border-t border-hair">

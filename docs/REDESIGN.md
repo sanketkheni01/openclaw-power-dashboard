@@ -234,3 +234,25 @@ the type-hierarchy rule (largest font must be ≥2× smallest) had pushed earlie
 ### Verify
 - index/system/logs/session = 0 detect issues; cron = 1 (waived); keys = 2 (waived).
 - All pages serve 200. Screenshots in `outputs/ui-review/shots/`.
+
+---
+
+## Full Impeccable re-validation — 2026-05-30
+
+Re-ran `impeccable detect` across all 6 pages and fixed flat-type-hierarchy **honestly**
+(the rule wants "fewer sizes, more contrast" / one clear focal heading — NOT global
+inflation). Resolved by giving each page a single genuine focal element rather than
+`!important`-bloating everything or waiving:
+- **index.html:** removed the leftover `body *{font-size:20px!important}` / `36px` gaming hack;
+  added a real 22px focal heading on the empty-state title ("No session selected"),
+  consolidated muddy middle sizes → clean 11/13/22 tiers. Now CLEAN.
+- **cron.html:** stat values 18 → 20px (focal stats strip). Now CLEAN.
+- **keys.html:** current-key hero value (`.ak-value`) 16 → 22px (focal). flat-type resolved.
+
+### Final detect state
+- index, cron, session, system, logs → **0 issues (CLEAN)**.
+- keys → 1: `overused-font: space grotesk` — genuine documented waiver (DESIGN.md-mandated
+  display face; "fixing" it means abandoning our own design language). Not a hack.
+
+Note: live-URL detect mode (Puppeteer) needs `--no-sandbox` as root; static-file analysis
+uses identical rule logic and is authoritative here.
