@@ -946,7 +946,7 @@ def parse_transcript_entry(entry):
         'content': parsed
     }
 
-def get_recent_activity(session_id, max_lines=5):
+def get_recent_activity(session_id, max_lines=10):
     """Read recent parsed transcript entries to get current activity."""
     files = find_session_files(session_id)
     if not files:
@@ -1011,7 +1011,7 @@ def get_recent_activity(session_id, max_lines=5):
                     break
             if 'action' in activity:
                 activities.append(activity)
-        return activities[-3:] if activities else None
+        return activities[-8:] if activities else None
     except Exception:
         return None
 

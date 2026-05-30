@@ -303,6 +303,17 @@ body{
 .live-status .ls-pulse{width:5px;height:5px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(74,222,128,.6);flex-shrink:0;animation:pulse 1.4s ease-in-out infinite}
 .live-status .ls-spin{width:9px;height:9px;border-radius:50%;border:1.5px solid rgba(74,222,128,.25);border-top-color:var(--green);flex-shrink:0;animation:spin .7s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* Mini live transcript feed inside running sub-agent cards */
+.sa-feed{margin-top:7px;display:flex;flex-direction:column;gap:3px;border-left:1.5px solid rgba(74,222,128,.2);padding-left:8px}
+.sa-feed-row{display:flex;align-items:center;gap:6px;overflow:hidden;opacity:.55}
+.sa-feed-row.current{opacity:1}
+.sa-feed-row .ls-spin{width:8px;height:8px;border:1.5px solid rgba(74,222,128,.25);border-top-color:var(--green);border-radius:50%;flex-shrink:0;animation:spin .7s linear infinite}
+.sa-feed-row .ls-dot{width:4px;height:4px;border-radius:50%;background:var(--text-muted);flex-shrink:0}
+.sa-feed-row .ls-pulse{width:5px;height:5px;border-radius:50%;background:var(--green);flex-shrink:0}
+.sa-feed-row .current .ls-pulse,.sa-feed-row.current .ls-pulse{animation:pulse 1.4s ease-in-out infinite}
+.sa-feed-row .ls-action{font-size:10px;font-weight:600;color:var(--text-secondary);white-space:nowrap;flex-shrink:0}
+.sa-feed-row.current .ls-action{color:var(--green)}
+.sa-feed-row .ls-detail{font-size:10px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;font-family:var(--mono)}
 .live-status .ls-action{font-size:10px;font-weight:600;color:var(--green);white-space:nowrap;flex-shrink:0;letter-spacing:.01em}
 .live-status .ls-detail{font-size:10px;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;font-family:var(--mono)}
 .activity-item{font-size:10px;padding:1px 0;display:flex;gap:6px;align-items:baseline}
@@ -1702,7 +1713,9 @@ function liveStatusInner(ls) {
     ? '<span class="ls-spin"></span>'
     : ls.icon === 'done'
       ? '<span class="ls-action" style="color:var(--green)">\u2705</span>'
-      : '<span class="ls-pulse"></span>';
+      : ls.icon === 'tool'
+        ? '<span class="ls-dot"></span>'
+        : '<span class="ls-pulse"></span>';
   const detailHtml = ls.detail ? `<span class="ls-detail">${escapeHtml(ls.detail)}</span>` : '';
   const actionHtml = ls.action ? `<span class="ls-action">${escapeHtml(ls.action)}</span>` : '';
   return `${ind}${actionHtml}${detailHtml}`;
@@ -1996,11 +2009,17 @@ function renderSubagentCards(container, agents, opts = {}) {
     if (ago) metaParts.push(`<span class="age">${ago}</span>`);
     if (channel) metaParts.push(`<span>${escapeHtml(channel)}</span>`);
     const meta = metaParts.join('<span class="sep">·</span>');
-    // Running sub-agents get a live-status pill (with spinner if a tool is executing)
+    // Running sub-agents get a mini live transcript (recent activity feed) instead of one pill
     let liveHtml = '';
     if (status === 'running' && s.activity && s.activity.length) {
-      const ls = normalizeActivity(s.activity[s.activity.length - 1]);
-      liveHtml = `<div class="live-status" style="margin-left:0">${liveStatusInner(ls)}</div>`;
+      const feed = s.activity.slice(-5).map((act, idx, arr) => {
+        const ls = normalizeActivity(act);
+        const isLast = idx === arr.length - 1;
+        // only the latest gets the live spinner/pulse; earlier ones show a static dot
+        const lsRow = isLast ? ls : { ...ls, icon: ls.icon === 'spin' ? 'tool' : ls.icon };
+        return `<div class="sa-feed-row${isLast ? ' current' : ''}">${liveStatusInner(lsRow)}</div>`;
+      }).join('');
+      liveHtml = `<div class="sa-feed">${feed}</div>`;
     }
     let preview = '';
     if (status !== 'running') {

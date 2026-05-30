@@ -354,3 +354,19 @@ to the currently-open session — 3-column layout: sessions list | transcript | 
 
 Verified: rail renders for main session (2 running at top, test-subagent DONE), header readable,
 20-card cap + footer. No new detector regressions.
+
+---
+
+## Mini live-transcript for running sub-agents (2026-05-30)
+
+Running sub-agent cards (in both the rail and the old sub-agents tab) now show a mini activity
+feed instead of a single status pill — a vertical timeline of the last ~5 actions
+(Thinking / exec <cmd> / tool done…), latest highlighted green with spinner/pulse, earlier ones
+dimmed with static dots, left timeline guide.
+
+- Backend `get_recent_activity`: kept last 8 entries (was 3), max_lines 10 (was 5).
+- Frontend `renderSubagentCards`: running agents render `.sa-feed` with `.sa-feed-row`s via
+  normalizeActivity + liveStatusInner; only the current row animates. Completed agents still
+  show last-message preview.
+- New `.sa-feed*` CSS + `ls-dot` (static) icon variant in liveStatusInner.
+Verified live with feed-test sub-agent: 5 feed rows, 1 active spinner, dimmed history.
