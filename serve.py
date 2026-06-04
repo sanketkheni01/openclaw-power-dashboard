@@ -978,8 +978,12 @@ def clean_inbound_user_text(text):
     return strip_message_id_hints(strip_envelope(inbound_stripped))
 
 
-_MEDIA_ATTACH_RE = _re.compile(r'\[media attached:\s*([^\]]+)\]')
+_MEDIA_ATTACH_RE = _re.compile(r'\[media attached:\s*([^\]]+)\]', _re.IGNORECASE)
 _MEDIA_URL_RE = _re.compile(r'media://(\S+?\.[a-zA-Z0-9]+)')
+_MEDIA_HELPER_LINE_RE = _re.compile(
+    r'^(?:To send an image back, prefer the message tool|If you must inline, use MEDIA:|Absolute and ~ paths only work|Keep caption in the text body\.)',
+    _re.IGNORECASE,
+)
 _IMG_EXT = ('.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg')
 _AUDIO_EXT = ('.ogg', '.mp3', '.wav', '.m4a')
 _VIDEO_EXT = ('.mp4', '.webm', '.mov')
@@ -990,6 +994,9 @@ def _media_url_to_http(u):
         return ''
     if u.startswith('media://'):
         return '/media/' + u[len('media://'):]
+    marker = '/.openclaw/media/'
+    if marker in u:
+        return '/media/' + u.split(marker, 1)[1]
     return u
 
 def _kind_for_ext(path):
@@ -1021,6 +1028,17 @@ def _extract_media_attachments(txt):
     """Pull [media attached: ...] / media:// refs out of message text into attachments."""
     out = []
     seen = set()
+    for raw in _MEDIA_ATTACH_RE.findall(txt or ''):
+        # Inbound helper lines often include multiple refs plus mime hints:
+        #   [media attached: /root/.openclaw/media/inbound/a.png (image/png) | /root/...]
+        for part in raw.split('|'):
+            ref = part.strip()
+            ref = _re.sub(r'\s+\([^)]*\)\s*$', '', ref).strip()
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            href = _media_url_to_http(ref)
+            out.append({'type': 'attachment', 'kind': _kind_for_ext(ref), 'url': href, 'name': ref.split('/')[-1]})
     for m in _MEDIA_URL_RE.findall(txt or ''):
         if m in seen:
             continue
@@ -1028,6 +1046,20 @@ def _extract_media_attachments(txt):
         href = _media_url_to_http('media://' + m)
         out.append({'type': 'attachment', 'kind': _kind_for_ext(m), 'url': href, 'name': m.split('/')[-1]})
     return out
+
+def _strip_media_helper_text(txt):
+    """Remove transport/helper lines injected for image uploads, not the user's caption/prompt."""
+    if not txt:
+        return txt
+    kept = []
+    for line in str(txt).split('\n'):
+        stripped = line.strip()
+        if _MEDIA_ATTACH_RE.search(stripped):
+            continue
+        if _MEDIA_HELPER_LINE_RE.search(stripped):
+            continue
+        kept.append(line)
+    return '\n'.join(kept).strip()
 
 def parse_transcript_entry(entry):
     """Convert a persisted session jsonl event into dashboard transcript entry.
@@ -1082,12 +1114,16 @@ def parse_transcript_entry(entry):
                 txt = c.get('text', '')
                 if role == 'user':
                     txt = clean_inbound_user_text(txt)
+                # Extract media refs before removing upload helper lines, so the
+                # image stays visible while the user's actual prompt/caption is
+                # not buried inside OpenClaw transport instructions.
+                atts = _extract_media_attachments(txt)
+                if role == 'user':
+                    txt = _strip_media_helper_text(txt)
                 if txt.strip():
-                    # Extract any [media attached: media://inbound/...] refs into renderable attachments
-                    atts = _extract_media_attachments(txt)
                     parsed.append({'type': 'text', 'text': txt[:5000]})
-                    for a in atts:
-                        parsed.append(a)
+                for a in atts:
+                    parsed.append(a)
             elif t == 'thinking':
                 thinking = c.get('thinking', '')
                 if thinking:
