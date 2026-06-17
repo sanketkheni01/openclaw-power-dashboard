@@ -2433,10 +2433,10 @@ function renderTranscript(entries) {
     const role = entry.role || 'system';
     const entryContent = entry.content || [];
 
-    // User: banner, breaks any tool group
-    if (role === 'user' && entryContent.some(c => c.type === 'text')) {
+    // User: banner/media bubble, breaks any tool group
+    if (role === 'user' && entryContent.some(c => c.type === 'text' || c.type === 'image' || c.type === 'attachment')) {
       flushToolBuf();
-      const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n');
+      const text = entryContent.filter(c => c.type === 'text').map(c => c.text || '').join('\n\n').trim();
       const userMedia = entryContent.filter(c => c.type === 'image' || c.type === 'attachment');
       const pushUserMedia = () => { for (const c of userMedia) blocks.push({kind:'user', ts: entry.ts, html: c.type === 'image' ? renderImageAttachment(c.url) : renderAttachment(c)}); };
       const isInternal = /<<<BEGIN_OPENCLAW_INTERNAL_CONTEXT>>>|OCPlatform runtime context \(internal\)|\[Internal task completion event\]|\[Inter-session message\]/.test(text);
@@ -2457,9 +2457,11 @@ function renderTranscript(entries) {
         pushUserMedia();
         continue;
       }
-      blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-bubble inline-block rounded-2xl rounded-tr-sm py-2 px-3 text-left" style="background:rgba(229,149,74,.10);border:1px solid rgba(229,149,74,.30)">
-        <div class="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed" style="color:var(--ink)">${escapeHtml(text)}</div>
-      </div>`});
+      if (text) {
+        blocks.push({kind:'user', ts: entry.ts, html:`<div class="umsg-bubble inline-block rounded-2xl rounded-tr-sm py-2 px-3 text-left" style="background:rgba(229,149,74,.10);border:1px solid rgba(229,149,74,.30)">
+          <div class="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed" style="color:var(--ink)">${escapeHtml(text)}</div>
+        </div>`});
+      }
       pushUserMedia();
       continue;
     }
